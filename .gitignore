@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+dist/
+build/
+*.egg-info/
+.eggs/
+
+# Cortec local storage — never commit
+.cortec/
+cortec_data/
+*.db
+*.sqlite
+*.sqlite3
+*.jsonl
+chroma_db/
+
+# Secrets — never commit
+.env
+.env.*
+*.pem
+*.key
+*.p12
+secrets.json
+.secrets.baseline
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Logs
+*.log
