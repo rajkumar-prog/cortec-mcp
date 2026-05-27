@@ -204,11 +204,32 @@ def status(project: str | None):
         border_style="green",
     ))
 
+    # Memory type breakdown
+    all_memories = db.list_all(project=project, approved_only=True)
+    if all_memories:
+        type_counts: dict[str, int] = {}
+        for m in all_memories:
+            t = m.get("type", "general")
+            type_counts[t] = type_counts.get(t, 0) + 1
+
+        type_table = Table(box=box.SIMPLE, show_header=True)
+        type_table.add_column("Type", style="bold")
+        type_table.add_column("Count", justify="right")
+        for t, n in sorted(type_counts.items(), key=lambda x: -x[1]):
+            type_table.add_row(t, str(n))
+        console.print("\n[bold]Memory breakdown by type:[/]")
+        console.print(type_table)
+
     if pending:
         console.print(f"\n[yellow]Pending memories ({len(pending)}):[/]")
         for m in pending:
             console.print(f"  [bold]{m['id']}[/]  {m['summary'][:60]}…")
         console.print("\nRun [bold]cortec approve <id>[/] to index a memory.")
+
+    # Unresolved conflicts
+    conflicts = db.list_conflicts(resolved=False)
+    if conflicts:
+        console.print(f"\n[red]⚠ {len(conflicts)} unresolved conflict(s).[/] Run [bold]cortec conflicts[/] to review.")
 
 
 # ── cortec export ─────────────────────────────────────────────────────────────
