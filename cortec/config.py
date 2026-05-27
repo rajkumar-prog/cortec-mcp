@@ -39,18 +39,30 @@ class Confidence:
 
 # ── Memory types ─────────────────────────────────────────────────────────────
 
-MEMORY_TYPES = [
-    "decision",
-    "bug",
-    "fix",
-    "architecture",
-    "preference",
-    "command",
-    "dependency",
-    "portfolio",
-    "resume",
-    "general",
-]
+MEMORY_TYPES = {
+    "decision":     "An explicit choice made about the project (tech, design, approach).",
+    "bug":          "A bug or error encountered during development.",
+    "fix":          "A solution or fix applied to a bug or problem.",
+    "architecture": "A structural or design pattern decision.",
+    "preference":   "A personal or team preference (style, tooling, workflow).",
+    "command":      "A useful CLI command or script worth remembering.",
+    "dependency":   "A library, package, or external dependency decision.",
+    "portfolio":    "Something worth highlighting in a portfolio or showcase.",
+    "resume":       "An achievement or skill worth adding to a resume.",
+    "general":      "General note that does not fit other categories.",
+}
+
+VALID_TYPES = set(MEMORY_TYPES.keys())
+
+
+def validate_type(type_: str) -> str:
+    """Validate and return the memory type. Falls back to 'general' if unknown."""
+    if type_ in VALID_TYPES:
+        return type_
+    raise ValueError(
+        f"Invalid memory type '{type_}'. "
+        f"Valid types: {', '.join(sorted(VALID_TYPES))}"
+    )
 
 
 # ── Paths ────────────────────────────────────────────────────────────────────

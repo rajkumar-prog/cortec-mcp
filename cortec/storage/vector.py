@@ -47,8 +47,19 @@ class VectorStore:
         query: str,
         top_k: int = 5,
         project: str | None = None,
+        type_: str | None = None,
     ) -> list[dict]:
-        where = {"project": project} if project else None
+        filters = []
+        if project:
+            filters.append({"project": project})
+        if type_:
+            filters.append({"type": type_})
+        if len(filters) == 0:
+            where = None
+        elif len(filters) == 1:
+            where = filters[0]
+        else:
+            where = {"$and": filters}
         results = self._col.query(
             query_texts=[query],
             n_results=min(top_k, max(1, self._col.count())),

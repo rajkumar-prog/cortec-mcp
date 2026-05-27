@@ -13,7 +13,9 @@ from .config import (
     CortecPaths,
     DEFAULT_APPROVAL_MODE,
     DEFAULT_PROJECT,
+    MEMORY_TYPES,
     RECALL_TOP_K,
+    validate_type,
 )
 from .ingest import archive_session, summarize
 from .security.scanner import assert_clean, scan
@@ -68,6 +70,12 @@ def remember(
     Returns:
         id, status, confidence, message.
     """
+    # 0. Validate memory type
+    try:
+        type = validate_type(type)
+    except ValueError as e:
+        return {"status": "error", "reason": str(e)}
+
     # 1. Redact secrets first
     clean_text = redact(text)
 
@@ -129,6 +137,7 @@ def remember(
 def recall(
     query: str,
     project: str | None = None,
+    type: str | None = None,
     top_k: int = RECALL_TOP_K,
 ) -> dict:
     """
@@ -138,6 +147,7 @@ def recall(
     Args:
         query:   What to search for.
         project: Limit search to a specific project (optional).
+        type:    Filter by memory type: decision | bug | fix | architecture | preference | command | dependency | portfolio | resume | general.
         top_k:   Number of results to return (default: 5).
 
     Returns:
@@ -146,7 +156,14 @@ def recall(
     if vector.count() == 0:
         return {"results": [], "message": "No memories stored yet. Use remember() first."}
 
-    hits = vector.search(query=query, top_k=top_k, project=project)
+    # Validate type filter if provided
+    if type:
+        try:
+            type = validate_type(type)
+        except ValueError as e:
+            return {"status": "error", "reason": str(e)}
+
+    hits = vector.search(query=query, top_k=top_k, project=project, type_=type)
     results = []
     for hit in hits:
         meta = db.get(hit["id"])

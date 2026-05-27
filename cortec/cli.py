@@ -105,9 +105,11 @@ def remember(text, project, type, source, tags, auto):
 @main.command()
 @click.argument("query")
 @click.option("--project", "-p", default=None, help="Limit to a project.")
+@click.option("--type",    "-t", default=None, help="Filter by type: decision, bug, fix, architecture, preference, command, dependency, portfolio, resume, general.")
 @click.option("--top",     "-n", default=5,    help="Number of results.")
-def recall(query, project, top):
+def recall(query, project, type, top):
     """Retrieve memories matching a query."""
+    from .config import validate_type
     db     = _db()
     vector = _vector()
 
@@ -115,7 +117,14 @@ def recall(query, project, top):
         console.print("[yellow]No memories stored yet. Use 'cortec remember' first.[/]")
         return
 
-    hits = vector.search(query, top_k=top, project=project)
+    if type:
+        try:
+            type = validate_type(type)
+        except ValueError as e:
+            console.print(f"[red]✗[/] {e}")
+            return
+
+    hits = vector.search(query, top_k=top, project=project, type_=type)
     if not hits:
         console.print(f"[yellow]No results for:[/] {query}")
         return
