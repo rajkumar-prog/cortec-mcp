@@ -280,6 +280,55 @@ def list_memories(
     }
 
 
+# ── Tool: project_context ────────────────────────────────────────────────────
+
+@mcp.tool()
+def project_context(project: str) -> dict:
+    """
+    Return a structured memory overview for a project, grouped by type.
+    Use this at the start of any session to load full project context.
+
+    Args:
+        project: The project name to load context for.
+
+    Returns:
+        Memory breakdown by type with counts and summaries.
+    """
+    memories = db.list_all(project=project, approved_only=True)
+
+    if not memories:
+        return {
+            "project": project,
+            "message": f"No memories found for project '{project}'.",
+            "context": {},
+            "total": 0,
+        }
+
+    # Group by type
+    grouped: dict[str, list[dict]] = {}
+    for m in memories:
+        t = m.get("type", "general")
+        if t not in grouped:
+            grouped[t] = []
+        grouped[t].append({
+            "id":         m["id"],
+            "summary":    m["summary"],
+            "confidence": m["confidence"],
+            "source":     m["source"],
+            "created_at": m["created_at"][:10],
+        })
+
+    # Build summary counts
+    type_counts = {t: len(items) for t, items in grouped.items()}
+
+    return {
+        "project":     project,
+        "total":       len(memories),
+        "type_counts": type_counts,
+        "context":     grouped,
+    }
+
+
 # ── Tool: forget ──────────────────────────────────────────────────────────────
 
 @mcp.tool()
