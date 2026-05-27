@@ -12,35 +12,31 @@ from rich.table import Table
 from rich import box
 from rich.panel import Panel
 
-from .config import CortecPaths, DEFAULT_PROJECT
+from .config import CortecPaths, Confidence, DEFAULT_PROJECT, validate_type
 from .storage.db import MetadataStore
 from .storage.vector import VectorStore
 from .security.scanner import scan
 from .security.redactor import redact
-from .ingest import summarize, archive_session
 
 console = Console()
-paths   = CortecPaths()
+paths = CortecPaths()
 
 
 def _db() -> MetadataStore:
     paths.init()
     return MetadataStore(paths.db)
 
+
 def _vector() -> VectorStore:
     paths.init()
     return VectorStore(paths.chroma)
 
-
-# ── CLI group ─────────────────────────────────────────────────────────────────
 
 @click.group()
 @click.version_option(package_name="cortec-mcp")
 def main():
     """Cortec — local-first memory for developer workflows."""
 
-
-# ── cortec init ───────────────────────────────────────────────────────────────
 
 @main.command()
 @click.argument("project", default=DEFAULT_PROJECT)
@@ -54,20 +50,18 @@ def init(project: str):
             f"# CORTEC.md\n\nproject: {project}\nauthor: Raj Kumar Satya\n\n"
             "## Notes\n- Add project-specific memory rules here.\n"
         )
-        console.print(f"[green]Created[/] .cortec/CORTEC.md")
+        console.print("[green]Created[/] .cortec/CORTEC.md")
     console.print(f"[green]✓[/] Cortec initialized for project: [bold]{project}[/]")
     console.print(f"  Storage: {paths.base}")
 
 
-# ── cortec remember ───────────────────────────────────────────────────────────
-
 @main.command()
 @click.argument("text")
 @click.option("--project", "-p", default=DEFAULT_PROJECT, help="Project name.")
-@click.option("--type",    "-t", default="general",       help="Memory type.")
-@click.option("--source",  "-s", default="session",       help="Memory source.")
-@click.option("--tags",    multiple=True,                  help="Tags (repeatable).")
-@click.option("--auto",    is_flag=True,                   help="Store without approval prompt.")
+@click.option("--type", "-t", default="general", help="Memory type.")
+@click.option("--source", "-s", default="session", help="Memory source.")
+@click.option("--tags", multiple=True, help="Tags (repeatable).")
+@click.option("--auto", is_flag=True, help="Store without approval prompt.")
 def remember(text, project, type, source, tags, auto):
     """Store a memory. Prompts for approval by default."""
     clean = redact(text)
@@ -76,10 +70,14 @@ def remember(text, project, type, source, tags, auto):
         console.print(f"[red]✗ Secret scan failed:[/] {', '.join(result.findings)}")
         sys.exit(1)
 
+    try:
+        type = validate_type(type)
+    except ValueError as e:
+        console.print(f"[red]✗[/] {e}")
+        sys.exit(1)
+
     db = _db()
     vector = _vector()
-
-    from .config import Confidence
     confidence = Confidence.from_source(source)
 
     if not auto:
@@ -100,17 +98,14 @@ def remember(text, project, type, source, tags, auto):
     console.print(f"[green]✓[/] Stored memory [bold]{memory_id}[/]  (confidence: {confidence})")
 
 
-# ── cortec recall ─────────────────────────────────────────────────────────────
-
 @main.command()
 @click.argument("query")
 @click.option("--project", "-p", default=None, help="Limit to a project.")
-@click.option("--type",    "-t", default=None, help="Filter by type: decision, bug, fix, architecture, preference, command, dependency, portfolio, resume, general.")
-@click.option("--top",     "-n", default=5,    help="Number of results.")
+@click.option("--type", "-t", default=None, help="Filter by type: decision, bug, fix, architecture, preference, command, dependency, portfolio, resume, general.")
+@click.option("--top", "-n", default=5, help="Number of results.")
 def recall(query, project, type, top):
     """Retrieve memories matching a query."""
-    from .config import validate_type
-    db     = _db()
+    db = _db()
     vector = _vector()
 
     if vector.count() == 0:
@@ -143,13 +138,11 @@ def recall(query, project, type, top):
         )
 
 
-# ── cortec forget ─────────────────────────────────────────────────────────────
-
 @main.command()
 @click.argument("memory_id")
 def forget(memory_id: str):
     """Permanently delete a memory by ID."""
-    db     = _db()
+    db = _db()
     vector = _vector()
     if click.confirm(f"Delete memory {memory_id}? This cannot be undone."):
         deleted = db.delete(memory_id)
@@ -160,15 +153,13 @@ def forget(memory_id: str):
             console.print(f"[red]Memory {memory_id} not found.[/]")
 
 
-# ── cortec approve ────────────────────────────────────────────────────────────
-
 @main.command()
 @click.argument("memory_id")
 def approve(memory_id: str):
     """Approve a pending memory and index it."""
-    db     = _db()
+    db = _db()
     vector = _vector()
-    meta   = db.get(memory_id)
+    meta = db.get(memory_id)
     if not meta:
         console.print(f"[red]Memory {memory_id} not found.[/]")
         return
@@ -177,19 +168,17 @@ def approve(memory_id: str):
         db.approve(memory_id)
         vector.add(memory_id, meta["summary"], {
             "project": meta["project"],
-            "type":    meta["type"],
-            "source":  meta["source"],
+            "type": meta["type"],
+            "source": meta["source"],
         })
         console.print(f"[green]✓[/] Memory [bold]{memory_id}[/] approved and indexed.")
 
-
-# ── cortec status ─────────────────────────────────────────────────────────────
 
 @main.command()
 @click.option("--project", "-p", default=None, help="Filter by project.")
 def status(project: str | None):
     """Show memory counts and pending approvals."""
-    db     = _db()
+    db = _db()
     vector = _vector()
     counts = db.count(project=project)
     pending = db.list_pending(project=project)
@@ -204,7 +193,6 @@ def status(project: str | None):
         border_style="green",
     ))
 
-    # Memory type breakdown
     all_memories = db.list_all(project=project, approved_only=True)
     if all_memories:
         type_counts: dict[str, int] = {}
@@ -226,33 +214,28 @@ def status(project: str | None):
             console.print(f"  [bold]{m['id']}[/]  {m['summary'][:60]}…")
         console.print("\nRun [bold]cortec approve <id>[/] to index a memory.")
 
-    # Unresolved conflicts
-    conflicts = db.list_conflicts(resolved=False)
-    if conflicts:
-        console.print(f"\n[red]⚠ {len(conflicts)} unresolved conflict(s).[/] Run [bold]cortec conflicts[/] to review.")
+    open_conflicts = db.list_conflicts(resolved=False)
+    if open_conflicts:
+        console.print(f"\n[red]⚠ {len(open_conflicts)} unresolved conflict(s).[/] Run [bold]cortec conflicts[/] to review.")
 
-
-# ── cortec export ─────────────────────────────────────────────────────────────
 
 @main.command()
-@click.option("--project", "-p", default=None,      help="Filter by project.")
-@click.option("--out",     "-o", default="cortec_export.json", help="Output file.")
+@click.option("--project", "-p", default=None, help="Filter by project.")
+@click.option("--out", "-o", default="cortec_export.json", help="Output file.")
 def export(project: str | None, out: str):
     """Export all memories to a JSON file."""
-    db       = _db()
+    db = _db()
     memories = db.list_all(project=project, approved_only=False)
     out_path = Path(out)
     out_path.write_text(json.dumps(memories, indent=2))
     console.print(f"[green]✓[/] Exported {len(memories)} memories to [bold]{out_path}[/]")
 
 
-# ── cortec conflicts ──────────────────────────────────────────────────────────
-
 @main.command()
 def conflicts():
     """Show all unresolved memory conflicts."""
-    db_ = _db()
-    items = db_.list_conflicts(resolved=False)
+    db = _db()
+    items = db.list_conflicts(resolved=False)
 
     if not items:
         console.print("[green]✓ No unresolved conflicts.[/]")
@@ -271,16 +254,14 @@ def conflicts():
     console.print("\nTo resolve: [bold]cortec resolve <conflict_id>[/]")
 
 
-# ── cortec resolve ────────────────────────────────────────────────────────────
-
 @main.command()
 @click.argument("conflict_id")
-@click.option("--keep", "-k", default=None, help="Memory ID to keep (the other will be forgotten).")
+@click.option("--keep", "-k", default=None, help="Memory ID to keep.")
 def resolve(conflict_id: str, keep: str | None):
     """Resolve a conflict by choosing which memory to keep."""
-    db_ = _db()
-    conflicts_list = db_.list_conflicts(resolved=False)
-    match = next((c for c in conflicts_list if c["id"] == conflict_id), None)
+    db = _db()
+    all_conflicts = db.list_conflicts(resolved=False)
+    match = next((c for c in all_conflicts if c["id"] == conflict_id), None)
 
     if not match:
         console.print(f"[red]Conflict {conflict_id} not found or already resolved.[/]")
@@ -291,33 +272,27 @@ def resolve(conflict_id: str, keep: str | None):
     if not keep:
         keep = click.prompt("Enter memory ID to keep")
 
-    drop_id = match["memory_id_b"] if keep == match["memory_id_a"] else match["memory_id_a"]
+    # The conflicting memory is memory_id_a — drop it if user wants to keep something else
+    drop_id = match["memory_id_a"] if keep != match["memory_id_a"] else None
 
-    if drop_id == "pending":
-        console.print("[green]✓ New memory was already blocked. Conflict cleared.[/]")
-    else:
-        vector_ = _vector()
-        db_.delete(drop_id)
-        vector_.delete(drop_id)
-        console.print(f"[green]✓ Deleted memory [bold]{drop_id}[/].[/]")
+    if drop_id:
+        vector = _vector()
+        db.delete(drop_id)
+        vector.delete(drop_id)
+        console.print(f"[green]✓[/] Deleted memory [bold]{drop_id}[/].")
 
-    # Mark conflict resolved
-    with db_._conn() as conn:
-        conn.execute(
-            "UPDATE conflicts SET resolved = 1 WHERE id = ?", (conflict_id,)
-        )
-    console.print(f"[green]✓ Conflict {conflict_id} resolved.[/]")
+    with db._conn() as conn:
+        conn.execute("UPDATE conflicts SET resolved = 1 WHERE id = ?", (conflict_id,))
+    console.print(f"[green]✓[/] Conflict {conflict_id} resolved.")
 
-
-# ── cortec doctor ─────────────────────────────────────────────────────────────
 
 @main.command()
 def doctor():
     """Health check — storage, security, and memory status."""
-    db     = _db()
+    db = _db()
     vector = _vector()
     counts = db.count()
-    conflicts = db.list_conflicts()
+    open_conflicts = db.list_conflicts(resolved=False)
 
     table = Table(title="Cortec Doctor", box=box.ROUNDED, border_style="green")
     table.add_column("Check", style="bold")
@@ -325,14 +300,14 @@ def doctor():
     table.add_column("Detail")
 
     checks = [
-        ("Storage path",      paths.base.exists(),      str(paths.base)),
-        ("SQLite DB",         paths.db.exists(),         str(paths.db)),
-        ("Chroma vector DB",  paths.chroma.exists(),     str(paths.chroma)),
-        ("Archive directory", paths.archive.exists(),    str(paths.archive)),
-        ("Total memories",    True,                      str(counts["total"])),
-        ("Pending approval",  counts["pending"] == 0,    f"{counts['pending']} pending"),
-        ("Conflicts",         len(conflicts) == 0,       f"{len(conflicts)} unresolved"),
-        ("Vector index",      vector.count() >= 0,       f"{vector.count()} entries"),
+        ("Storage path",      paths.base.exists(),         str(paths.base)),
+        ("SQLite DB",         paths.db.exists(),            str(paths.db)),
+        ("Chroma vector DB",  paths.chroma.exists(),        str(paths.chroma)),
+        ("Archive directory", paths.archive.exists(),       str(paths.archive)),
+        ("Total memories",    True,                         str(counts["total"])),
+        ("Pending approval",  counts["pending"] == 0,       f"{counts['pending']} pending"),
+        ("Conflicts",         len(open_conflicts) == 0,     f"{len(open_conflicts)} unresolved"),
+        ("Vector index",      vector.count() >= 0,          f"{vector.count()} entries"),
     ]
 
     all_ok = True
@@ -350,17 +325,15 @@ def doctor():
         sys.exit(1)
 
 
-# ── cortec audit ─────────────────────────────────────────────────────────────
-
 @main.command()
 @click.option("--project", "-p", default=None, help="Filter by project.")
 def audit(project: str | None):
     """Audit report — what was stored, when, and from where."""
-    db       = _db()
+    db = _db()
     memories = db.list_all(project=project, approved_only=False)
 
     table = Table(title="Cortec Audit", box=box.SIMPLE, border_style="cyan")
-    table.add_column("ID",         style="bold")
+    table.add_column("ID", style="bold")
     table.add_column("Project")
     table.add_column("Type")
     table.add_column("Source")

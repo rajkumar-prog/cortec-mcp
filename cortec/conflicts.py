@@ -1,6 +1,6 @@
 """
-Conflict detection — identifies when new memories contradict existing ones.
-Checks for contradictions within the same project and type.
+Conflict detection — checks if a new memory contradicts existing ones
+within the same project and type.
 """
 
 import re
@@ -14,26 +14,22 @@ class ConflictResult:
     description: str | None
 
 
-# ── Contradiction signal pairs ────────────────────────────────────────────────
 # Each tuple: (pattern_a, pattern_b, label)
-# If one memory matches pattern_a and another matches pattern_b
-# for the same key concept — it's a likely conflict.
-
-_OPPOSITES: list[tuple[re.Pattern, re.Pattern, str]] = [
-    (re.compile(r"\buse\b.{0,30}\bflask\b",    re.I), re.compile(r"\buse\b.{0,30}\bdjango\b",  re.I), "web framework"),
-    (re.compile(r"\buse\b.{0,30}\bpostgres\b",  re.I), re.compile(r"\buse\b.{0,30}\bmysql\b",   re.I), "database"),
-    (re.compile(r"\buse\b.{0,30}\bmysql\b",     re.I), re.compile(r"\buse\b.{0,30}\bsqlite\b",  re.I), "database"),
-    (re.compile(r"\buse\b.{0,30}\bchroma\b",    re.I), re.compile(r"\buse\b.{0,30}\bqdrant\b",  re.I), "vector database"),
-    (re.compile(r"\buse\b.{0,30}\bfastapi\b",   re.I), re.compile(r"\buse\b.{0,30}\bflask\b",   re.I), "web framework"),
-    (re.compile(r"\buse\b.{0,30}\breact\b",     re.I), re.compile(r"\buse\b.{0,30}\bvue\b",     re.I), "frontend framework"),
-    (re.compile(r"\buse\b.{0,30}\bpython\b",    re.I), re.compile(r"\buse\b.{0,30}\bnode\b",    re.I), "runtime"),
-    (re.compile(r"\buse\b.{0,30}\bnpm\b",       re.I), re.compile(r"\buse\b.{0,30}\bpnpm\b",    re.I), "package manager"),
-    (re.compile(r"\buse\b.{0,30}\bnpm\b",       re.I), re.compile(r"\buse\b.{0,30}\byarn\b",    re.I), "package manager"),
-    (re.compile(r"\bdo\s+not\b.{0,40}",         re.I), re.compile(r"\balways\b.{0,40}",         re.I), "rule contradiction"),
-    (re.compile(r"\bavoid\b.{0,30}",            re.I), re.compile(r"\bprefer\b.{0,30}",         re.I), "preference contradiction"),
+# If existing matches pattern_a and new matches pattern_b (or vice versa) — flag it
+_OPPOSITES = [
+    (re.compile(r"\buse\b.{0,30}\bflask\b", re.I),   re.compile(r"\buse\b.{0,30}\bdjango\b", re.I),  "web framework"),
+    (re.compile(r"\buse\b.{0,30}\bpostgres\b", re.I), re.compile(r"\buse\b.{0,30}\bmysql\b", re.I),   "database"),
+    (re.compile(r"\buse\b.{0,30}\bmysql\b", re.I),    re.compile(r"\buse\b.{0,30}\bsqlite\b", re.I),  "database"),
+    (re.compile(r"\buse\b.{0,30}\bchroma\b", re.I),   re.compile(r"\buse\b.{0,30}\bqdrant\b", re.I),  "vector database"),
+    (re.compile(r"\buse\b.{0,30}\bfastapi\b", re.I),  re.compile(r"\buse\b.{0,30}\bflask\b", re.I),   "web framework"),
+    (re.compile(r"\buse\b.{0,30}\breact\b", re.I),    re.compile(r"\buse\b.{0,30}\bvue\b", re.I),     "frontend framework"),
+    (re.compile(r"\buse\b.{0,30}\bpython\b", re.I),   re.compile(r"\buse\b.{0,30}\bnode\b", re.I),    "runtime"),
+    (re.compile(r"\buse\b.{0,30}\bnpm\b", re.I),      re.compile(r"\buse\b.{0,30}\bpnpm\b", re.I),    "package manager"),
+    (re.compile(r"\buse\b.{0,30}\bnpm\b", re.I),      re.compile(r"\buse\b.{0,30}\byarn\b", re.I),    "package manager"),
+    (re.compile(r"\bdo\s+not\b.{0,40}", re.I),        re.compile(r"\balways\b.{0,40}", re.I),         "rule contradiction"),
+    (re.compile(r"\bavoid\b.{0,30}", re.I),            re.compile(r"\bprefer\b.{0,30}", re.I),         "preference contradiction"),
 ]
 
-# Shared concept extractor — finds tech names and choices in text
 _TECH_PATTERN = re.compile(
     r"\b(flask|django|fastapi|postgres|postgresql|mysql|sqlite|mongodb|redis|"
     r"chroma|qdrant|pinecone|weaviate|react|vue|angular|svelte|next\.?js|nuxt|"
@@ -53,10 +49,7 @@ def detect(
     project: str,
     type_: str,
 ) -> ConflictResult:
-    """
-    Compare new_text against existing approved memories of the same project + type.
-    Returns a ConflictResult describing any contradiction found.
-    """
+    """Compare new_text against existing memories of the same project + type."""
     same_type = [
         m for m in existing_memories
         if m.get("project") == project and m.get("type") == type_
@@ -70,12 +63,11 @@ def detect(
         existing_text = mem.get("summary", "")
         existing_techs = _extract_tech(existing_text)
 
-        # Check opposite pattern pairs
         for pat_a, pat_b, label in _OPPOSITES:
             new_a = bool(pat_a.search(new_text))
             new_b = bool(pat_b.search(new_text))
-            ex_a  = bool(pat_a.search(existing_text))
-            ex_b  = bool(pat_b.search(existing_text))
+            ex_a = bool(pat_a.search(existing_text))
+            ex_b = bool(pat_b.search(existing_text))
 
             if (new_a and ex_b) or (new_b and ex_a):
                 return ConflictResult(
@@ -88,13 +80,10 @@ def detect(
                     ),
                 )
 
-        # Check tech overlap contradiction
-        # If both memories mention different tech in the same category — flag it
-        conflict_techs = new_techs & existing_techs
-        if not conflict_techs and new_techs and existing_techs:
-            # Both have tech mentions but no overlap — possible contradiction
-            overlap_check = new_techs.symmetric_difference(existing_techs)
-            if len(overlap_check) >= 2 and type_ in ("decision", "architecture", "preference"):
+        # If both memories mention different tech with no overlap, flag it
+        if not (new_techs & existing_techs) and new_techs and existing_techs:
+            diff = new_techs.symmetric_difference(existing_techs)
+            if len(diff) >= 2 and type_ in ("decision", "architecture", "preference"):
                 return ConflictResult(
                     found=True,
                     existing_id=mem["id"],

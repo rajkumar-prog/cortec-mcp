@@ -7,11 +7,6 @@ import uuid
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
-
-
-def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
 
 
 class MetadataStore:
@@ -29,40 +24,32 @@ class MetadataStore:
         with self._conn() as conn:
             conn.executescript("""
                 CREATE TABLE IF NOT EXISTS memories (
-                    id           TEXT PRIMARY KEY,
-                    project      TEXT NOT NULL DEFAULT 'default',
-                    type         TEXT NOT NULL DEFAULT 'general',
-                    summary      TEXT NOT NULL,
-                    source       TEXT,
-                    created_at   TEXT NOT NULL,
-                    confidence   REAL NOT NULL DEFAULT 0.5,
-                    tags         TEXT NOT NULL DEFAULT '[]',
+                    id            TEXT PRIMARY KEY,
+                    project       TEXT NOT NULL DEFAULT 'default',
+                    type          TEXT NOT NULL DEFAULT 'general',
+                    summary       TEXT NOT NULL,
+                    source        TEXT,
+                    created_at    TEXT NOT NULL,
+                    confidence    REAL NOT NULL DEFAULT 0.5,
+                    tags          TEXT NOT NULL DEFAULT '[]',
                     related_files TEXT NOT NULL DEFAULT '[]',
                     conflict_flag INTEGER NOT NULL DEFAULT 0,
-                    approved     INTEGER NOT NULL DEFAULT 0,
-                    raw_text     TEXT
+                    approved      INTEGER NOT NULL DEFAULT 0,
+                    raw_text      TEXT
                 );
 
                 CREATE TABLE IF NOT EXISTS conflicts (
                     id           TEXT PRIMARY KEY,
                     memory_id_a  TEXT NOT NULL,
-                    memory_id_b  TEXT NOT NULL,
                     description  TEXT NOT NULL,
                     detected_at  TEXT NOT NULL,
-                    resolved     INTEGER NOT NULL DEFAULT 0,
-                    FOREIGN KEY (memory_id_a) REFERENCES memories(id),
-                    FOREIGN KEY (memory_id_b) REFERENCES memories(id)
+                    resolved     INTEGER NOT NULL DEFAULT 0
                 );
 
-                CREATE INDEX IF NOT EXISTS idx_memories_project
-                    ON memories(project);
-                CREATE INDEX IF NOT EXISTS idx_memories_type
-                    ON memories(type);
-                CREATE INDEX IF NOT EXISTS idx_memories_approved
-                    ON memories(approved);
+                CREATE INDEX IF NOT EXISTS idx_memories_project  ON memories(project);
+                CREATE INDEX IF NOT EXISTS idx_memories_type     ON memories(type);
+                CREATE INDEX IF NOT EXISTS idx_memories_approved ON memories(approved);
             """)
-
-    # ── Write ────────────────────────────────────────────────────────────────
 
     def insert(
         self,
@@ -77,6 +64,7 @@ class MetadataStore:
         raw_text: str | None = None,
     ) -> str:
         memory_id = str(uuid.uuid4())[:8]
+        now = datetime.now(timezone.utc).isoformat()
         with self._conn() as conn:
             conn.execute(
                 """
@@ -86,12 +74,7 @@ class MetadataStore:
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    memory_id,
-                    project,
-                    type_,
-                    summary,
-                    source,
-                    _now(),
+                    memory_id, project, type_, summary, source, now,
                     confidence,
                     json.dumps(tags or []),
                     json.dumps(related_files or []),
@@ -110,12 +93,8 @@ class MetadataStore:
 
     def delete(self, memory_id: str) -> bool:
         with self._conn() as conn:
-            cur = conn.execute(
-                "DELETE FROM memories WHERE id = ?", (memory_id,)
-            )
+            cur = conn.execute("DELETE FROM memories WHERE id = ?", (memory_id,))
         return cur.rowcount > 0
-
-    # ── Read ─────────────────────────────────────────────────────────────────
 
     def get(self, memory_id: str) -> dict | None:
         with self._conn() as conn:
@@ -124,11 +103,7 @@ class MetadataStore:
             ).fetchone()
         return dict(row) if row else None
 
-    def list_all(
-        self,
-        project: str | None = None,
-        approved_only: bool = True,
-    ) -> list[dict]:
+    def list_all(self, project: str | None = None, approved_only: bool = True) -> list[dict]:
         query = "SELECT * FROM memories WHERE 1=1"
         params: list = []
         if project:
@@ -155,46 +130,38 @@ class MetadataStore:
     def count(self, project: str | None = None) -> dict:
         with self._conn() as conn:
             base = "SELECT COUNT(*) FROM memories"
-            total   = conn.execute(base).fetchone()[0]
-            pending = conn.execute(
-                base + " WHERE approved = 0"
-            ).fetchone()[0]
+            total = conn.execute(base).fetchone()[0]
+            pending = conn.execute(base + " WHERE approved = 0").fetchone()[0]
             if project:
                 proj_total = conn.execute(
                     base + " WHERE project = ?", (project,)
                 ).fetchone()[0]
             else:
                 proj_total = total
-        return {"total": total, "pending": pending, "approved": total - pending, "project_total": proj_total}
+        return {
+            "total": total,
+            "pending": pending,
+            "approved": total - pending,
+            "project_total": proj_total,
+        }
 
-    # ── Conflicts ────────────────────────────────────────────────────────────
-
-    def flag_conflict(
-        self,
-        memory_id_a: str,
-        memory_id_b: str,
-        description: str,
-    ) -> str:
+    def flag_conflict(self, memory_id_a: str, description: str) -> str:
         conflict_id = str(uuid.uuid4())[:8]
+        now = datetime.now(timezone.utc).isoformat()
         with self._conn() as conn:
             conn.execute(
-                "UPDATE memories SET conflict_flag = 1 WHERE id IN (?, ?)",
-                (memory_id_a, memory_id_b),
+                "UPDATE memories SET conflict_flag = 1 WHERE id = ?",
+                (memory_id_a,),
             )
             conn.execute(
-                """
-                INSERT INTO conflicts
-                  (id, memory_id_a, memory_id_b, description, detected_at)
-                VALUES (?, ?, ?, ?, ?)
-                """,
-                (conflict_id, memory_id_a, memory_id_b, description, _now()),
+                "INSERT INTO conflicts (id, memory_id_a, description, detected_at) VALUES (?, ?, ?, ?)",
+                (conflict_id, memory_id_a, description, now),
             )
         return conflict_id
 
     def list_conflicts(self, resolved: bool = False) -> list[dict]:
         with self._conn() as conn:
             rows = conn.execute(
-                "SELECT * FROM conflicts WHERE resolved = ?",
-                (int(resolved),)
+                "SELECT * FROM conflicts WHERE resolved = ?", (int(resolved),)
             ).fetchall()
         return [dict(r) for r in rows]

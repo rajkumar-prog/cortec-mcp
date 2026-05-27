@@ -1,6 +1,6 @@
 """
 Secret scanner — detects sensitive data before anything is stored.
-Runs as a gate: if secrets are found, storage is blocked.
+If secrets are found, storage is blocked.
 """
 
 import re
@@ -16,10 +16,8 @@ class ScanResult:
         return self.clean
 
 
-# ── Patterns ─────────────────────────────────────────────────────────────────
-# Ordered from most specific to least specific.
-
-_PATTERNS: list[tuple[str, re.Pattern]] = [
+# Ordered from most specific to least specific
+_PATTERNS = [
     ("OpenAI API key",       re.compile(r"sk-[A-Za-z0-9]{32,}")),
     ("Anthropic API key",    re.compile(r"sk-ant-[A-Za-z0-9\-_]{32,}")),
     ("GitHub token",         re.compile(r"gh[ps]_[A-Za-z0-9]{36,}")),
@@ -39,22 +37,6 @@ _PATTERNS: list[tuple[str, re.Pattern]] = [
 
 
 def scan(text: str) -> ScanResult:
-    """
-    Scan text for secrets. Returns ScanResult(clean=True) if safe,
-    ScanResult(clean=False, findings=[...]) if secrets are detected.
-    """
-    findings: list[str] = []
-    for label, pattern in _PATTERNS:
-        if pattern.search(text):
-            findings.append(label)
+    """Scan text for secrets. Returns clean=True if safe, clean=False with findings if not."""
+    findings = [label for label, pattern in _PATTERNS if pattern.search(text)]
     return ScanResult(clean=len(findings) == 0, findings=findings)
-
-
-def assert_clean(text: str) -> None:
-    """Raise ValueError if secrets are detected."""
-    result = scan(text)
-    if not result.clean:
-        raise ValueError(
-            f"Secret scan failed. Detected: {', '.join(result.findings)}. "
-            "Redact secrets before storing."
-        )
