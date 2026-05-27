@@ -225,6 +225,69 @@ def export(project: str | None, out: str):
     console.print(f"[green]✓[/] Exported {len(memories)} memories to [bold]{out_path}[/]")
 
 
+# ── cortec conflicts ──────────────────────────────────────────────────────────
+
+@main.command()
+def conflicts():
+    """Show all unresolved memory conflicts."""
+    db_ = _db()
+    items = db_.list_conflicts(resolved=False)
+
+    if not items:
+        console.print("[green]✓ No unresolved conflicts.[/]")
+        return
+
+    console.print(f"\n[red]⚠ {len(items)} unresolved conflict(s):[/]\n")
+    for c in items:
+        console.print(
+            Panel(
+                c["description"],
+                title=f"Conflict [bold]{c['id']}[/]  —  memory {c['memory_id_a']}",
+                subtitle=f"detected: {c['detected_at'][:10]}",
+                border_style="red",
+            )
+        )
+    console.print("\nTo resolve: [bold]cortec resolve <conflict_id>[/]")
+
+
+# ── cortec resolve ────────────────────────────────────────────────────────────
+
+@main.command()
+@click.argument("conflict_id")
+@click.option("--keep", "-k", default=None, help="Memory ID to keep (the other will be forgotten).")
+def resolve(conflict_id: str, keep: str | None):
+    """Resolve a conflict by choosing which memory to keep."""
+    db_ = _db()
+    conflicts_list = db_.list_conflicts(resolved=False)
+    match = next((c for c in conflicts_list if c["id"] == conflict_id), None)
+
+    if not match:
+        console.print(f"[red]Conflict {conflict_id} not found or already resolved.[/]")
+        return
+
+    console.print(Panel(match["description"], title=f"Conflict {conflict_id}", border_style="yellow"))
+
+    if not keep:
+        keep = click.prompt("Enter memory ID to keep")
+
+    drop_id = match["memory_id_b"] if keep == match["memory_id_a"] else match["memory_id_a"]
+
+    if drop_id == "pending":
+        console.print("[green]✓ New memory was already blocked. Conflict cleared.[/]")
+    else:
+        vector_ = _vector()
+        db_.delete(drop_id)
+        vector_.delete(drop_id)
+        console.print(f"[green]✓ Deleted memory [bold]{drop_id}[/].[/]")
+
+    # Mark conflict resolved
+    with db_._conn() as conn:
+        conn.execute(
+            "UPDATE conflicts SET resolved = 1 WHERE id = ?", (conflict_id,)
+        )
+    console.print(f"[green]✓ Conflict {conflict_id} resolved.[/]")
+
+
 # ── cortec doctor ─────────────────────────────────────────────────────────────
 
 @main.command()
