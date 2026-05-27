@@ -17,6 +17,7 @@ from .config import (
     RECALL_TOP_K,
     validate_type,
 )
+from .conflicts import detect as detect_conflict
 from .ingest import archive_session, summarize
 from .security.scanner import assert_clean, scan
 from .security.redactor import redact
@@ -89,6 +90,27 @@ def remember(
 
     # 3. Compute confidence from source
     confidence = Confidence.from_source(source)
+
+    # 3b. Run conflict detection against existing memories
+    existing = db.list_all(project=project, approved_only=True)
+    conflict = detect_conflict(
+        new_text=clean_text,
+        existing_memories=existing,
+        project=project,
+        type_=type,
+    )
+    if conflict.found:
+        conflict_id = db.flag_conflict(
+            memory_id_a=conflict.existing_id,
+            memory_id_b="pending",
+            description=conflict.description,
+        )
+        return {
+            "status":      "conflict_detected",
+            "conflict_id": conflict_id,
+            "description": conflict.description,
+            "action":      "Resolve the conflict first, then store the memory.",
+        }
 
     # 4. Determine approval state
     approved = mode == ApprovalMode.AUTO
