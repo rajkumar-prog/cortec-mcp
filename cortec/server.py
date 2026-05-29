@@ -16,6 +16,7 @@ from .config import (
     validate_type,
 )
 from .conflicts import detect as detect_conflict
+from .github import fetch_commits, fetch_prs, fetch_issues
 from .ingest import archive_session, summarize
 from .security.scanner import scan
 from .security.redactor import redact
@@ -249,6 +250,80 @@ def project_context(project: str) -> dict:
         "total": len(memories),
         "type_counts": {t: len(items) for t, items in grouped.items()},
         "context": grouped,
+    }
+
+
+@mcp.tool()
+def index_github_repo(
+    repo: str,
+    project: str = DEFAULT_PROJECT,
+    commits: int = 20,
+    prs: int = 10,
+    issues: int = 10,
+) -> dict:
+    """
+    Index a GitHub repo's commits, PRs, and issues as memories.
+    repo format: owner/repo (e.g. rajkumar-prog/cortec-mcp)
+    """
+    stored = []
+    skipped = []
+
+    def _store(summary: str, type_: str, source: str, sha: str | None = None) -> None:
+        clean = redact(summary)
+        if not scan(clean).clean:
+            skipped.append(summary[:60])
+            return
+        mid = db.insert(
+            summary=clean,
+            project=project,
+            type_=type_,
+            source=source,
+            confidence=0.8,
+            approved=True,
+            commit_sha=sha,
+        )
+        vector.add(mid, clean, {"project": project, "type": type_, "source": source})
+        stored.append(mid)
+
+    errors = []
+
+    try:
+        for c in fetch_commits(repo, limit=commits):
+            if c.message.strip():
+                _store(
+                    f"[{c.sha}] {c.message} — by {c.author} on {c.date[:10]}",
+                    type_="fix",
+                    source="github_commit",
+                    sha=c.sha,
+                )
+    except RuntimeError as e:
+        errors.append(f"commits: {e}")
+
+    try:
+        for pr in fetch_prs(repo, limit=prs):
+            text = f"PR #{pr.number}: {pr.title}"
+            if pr.body:
+                text += f"\n{pr.body}"
+            _store(text, type_="fix", source="github_pr")
+    except RuntimeError as e:
+        errors.append(f"prs: {e}")
+
+    try:
+        for issue in fetch_issues(repo, limit=issues):
+            text = f"Issue #{issue.number} ({issue.state}): {issue.title}"
+            if issue.body:
+                text += f"\n{issue.body}"
+            _store(text, type_="bug", source="github_issue")
+    except RuntimeError as e:
+        errors.append(f"issues: {e}")
+
+    return {
+        "repo": repo,
+        "project": project,
+        "stored": len(stored),
+        "skipped": len(skipped),
+        "memory_ids": stored,
+        "errors": errors,
     }
 
 

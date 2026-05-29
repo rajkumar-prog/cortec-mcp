@@ -47,15 +47,17 @@ class MetadataStore:
                     resolved     INTEGER NOT NULL DEFAULT 0
                 );
 
-                CREATE INDEX IF NOT EXISTS idx_memories_project    ON memories(project);
-                CREATE INDEX IF NOT EXISTS idx_memories_type       ON memories(type);
-                CREATE INDEX IF NOT EXISTS idx_memories_approved   ON memories(approved);
-                CREATE INDEX IF NOT EXISTS idx_memories_commit_sha ON memories(commit_sha);
+                CREATE INDEX IF NOT EXISTS idx_memories_project  ON memories(project);
+                CREATE INDEX IF NOT EXISTS idx_memories_type     ON memories(type);
+                CREATE INDEX IF NOT EXISTS idx_memories_approved ON memories(approved);
             """)
             # Migrate existing databases that predate the commit_sha column
             cols = {row[1] for row in conn.execute("PRAGMA table_info(memories)")}
             if "commit_sha" not in cols:
                 conn.execute("ALTER TABLE memories ADD COLUMN commit_sha TEXT")
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_memories_commit_sha ON memories(commit_sha)"
+            )
 
     def insert(
         self,
