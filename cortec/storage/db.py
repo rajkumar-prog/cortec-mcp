@@ -35,7 +35,8 @@ class MetadataStore:
                     related_files TEXT NOT NULL DEFAULT '[]',
                     conflict_flag INTEGER NOT NULL DEFAULT 0,
                     approved      INTEGER NOT NULL DEFAULT 0,
-                    raw_text      TEXT
+                    raw_text      TEXT,
+                    commit_sha    TEXT
                 );
 
                 CREATE TABLE IF NOT EXISTS conflicts (
@@ -46,10 +47,15 @@ class MetadataStore:
                     resolved     INTEGER NOT NULL DEFAULT 0
                 );
 
-                CREATE INDEX IF NOT EXISTS idx_memories_project  ON memories(project);
-                CREATE INDEX IF NOT EXISTS idx_memories_type     ON memories(type);
-                CREATE INDEX IF NOT EXISTS idx_memories_approved ON memories(approved);
+                CREATE INDEX IF NOT EXISTS idx_memories_project    ON memories(project);
+                CREATE INDEX IF NOT EXISTS idx_memories_type       ON memories(type);
+                CREATE INDEX IF NOT EXISTS idx_memories_approved   ON memories(approved);
+                CREATE INDEX IF NOT EXISTS idx_memories_commit_sha ON memories(commit_sha);
             """)
+            # Migrate existing databases that predate the commit_sha column
+            cols = {row[1] for row in conn.execute("PRAGMA table_info(memories)")}
+            if "commit_sha" not in cols:
+                conn.execute("ALTER TABLE memories ADD COLUMN commit_sha TEXT")
 
     def insert(
         self,
@@ -62,6 +68,7 @@ class MetadataStore:
         related_files: list[str] | None = None,
         approved: bool = False,
         raw_text: str | None = None,
+        commit_sha: str | None = None,
     ) -> str:
         memory_id = str(uuid.uuid4())[:8]
         now = datetime.now(timezone.utc).isoformat()
@@ -70,8 +77,8 @@ class MetadataStore:
                 """
                 INSERT INTO memories
                   (id, project, type, summary, source, created_at,
-                   confidence, tags, related_files, approved, raw_text)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                   confidence, tags, related_files, approved, raw_text, commit_sha)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     memory_id, project, type_, summary, source, now,
@@ -80,9 +87,27 @@ class MetadataStore:
                     json.dumps(related_files or []),
                     int(approved),
                     raw_text,
+                    commit_sha,
                 ),
             )
         return memory_id
+
+    def link_to_commit(self, memory_id: str, commit_sha: str) -> bool:
+        """Attach a commit SHA to an existing memory."""
+        with self._conn() as conn:
+            cur = conn.execute(
+                "UPDATE memories SET commit_sha = ? WHERE id = ?",
+                (commit_sha, memory_id),
+            )
+        return cur.rowcount > 0
+
+    def get_by_commit(self, commit_sha: str) -> list[dict]:
+        """Return all memories linked to a specific commit SHA."""
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT * FROM memories WHERE commit_sha = ?", (commit_sha,)
+            ).fetchall()
+        return [dict(r) for r in rows]
 
     def approve(self, memory_id: str) -> bool:
         with self._conn() as conn:
