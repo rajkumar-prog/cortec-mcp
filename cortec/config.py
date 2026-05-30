@@ -23,17 +23,20 @@ class Confidence:
     STACKOVERFLOW    = 0.6
     INFERRED         = 0.5
 
+    # Maps source names to confidence scores — checked in order, first match wins
+    _SOURCE_MAP: list[tuple[tuple[str, ...], float]] = [
+        (("confirmed", "user"),                                         0.9),
+        (("github_commit", "github_pr", "github_issue", "github"),     0.8),
+        (("session", "chat", "summary"),                                0.7),
+        (("stackoverflow", "stack_overflow", "so_"),                    0.6),
+    ]
+
     @staticmethod
     def from_source(source: str) -> float:
-        source = source.lower()
-        if "github" in source or "commit" in source or "pr" in source:
-            return Confidence.GITHUB
-        if "session" in source or "chat" in source:
-            return Confidence.SESSION_SUMMARY
-        if "stackoverflow" in source or "so" in source:
-            return Confidence.STACKOVERFLOW
-        if "confirmed" in source or "user" in source:
-            return Confidence.USER_CONFIRMED
+        s = source.lower()
+        for keywords, score in Confidence._SOURCE_MAP:
+            if any(k in s for k in keywords):
+                return score
         return Confidence.INFERRED
 
 
