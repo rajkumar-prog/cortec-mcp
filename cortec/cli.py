@@ -13,6 +13,7 @@ from rich import box
 from rich.panel import Panel
 
 from .config import CortecPaths, Confidence, DEFAULT_PROJECT, validate_type
+from .github import fetch_commits, fetch_prs, fetch_issues
 from .storage.db import MetadataStore
 from .storage.vector import VectorStore
 from .security.scanner import scan
@@ -354,3 +355,94 @@ def audit(project: str | None):
 
     console.print(table)
     console.print(f"\nTotal: {len(memories)} memories")
+
+
+@main.command("github-index")
+@click.argument("repo")
+@click.option("--project", "-p", default=DEFAULT_PROJECT, help="Project to store memories under.")
+@click.option("--commits", default=20, help="Number of commits to index.")
+@click.option("--prs", default=10, help="Number of pull requests to index.")
+@click.option("--issues", default=10, help="Number of issues to index.")
+def github_index(repo: str, project: str, commits: int, prs: int, issues: int):
+    """Index a GitHub repo's commits, PRs, and issues as memories.
+
+    REPO format: owner/repo  (e.g. rajkumar-prog/cortec-mcp)
+    """
+    db = _db()
+    vector = _vector()
+    stored = 0
+    skipped = 0
+
+    def _store(summary: str, type_: str, source: str, sha: str | None = None) -> None:
+        nonlocal stored, skipped
+        clean = redact(summary)
+        if not scan(clean).clean:
+            skipped += 1
+            return
+        mid = db.insert(
+            summary=clean, project=project, type_=type_,
+            source=source, confidence=0.8,
+            approved=True, commit_sha=sha,
+        )
+        vector.add(mid, clean, {"project": project, "type": type_, "source": source})
+        stored += 1
+
+    try:
+        commit_list = fetch_commits(repo, limit=commits)
+        for c in commit_list:
+            if c.message.strip():
+                _store(
+                    f"[{c.sha}] {c.message} — by {c.author} on {c.date[:10]}",
+                    type_="fix", source="github_commit", sha=c.sha,
+                )
+        console.print(f"[green]✓[/] Indexed {len(commit_list)} commits")
+    except RuntimeError as e:
+        console.print(f"[yellow]⚠ Commits skipped:[/] {e}")
+
+    try:
+        pr_list = fetch_prs(repo, limit=prs)
+        for pr in pr_list:
+            text = f"PR #{pr.number}: {pr.title}"
+            if pr.body:
+                text += f"\n{pr.body}"
+            _store(text, type_="fix", source="github_pr")
+        console.print(f"[green]✓[/] Indexed {len(pr_list)} pull requests")
+    except RuntimeError as e:
+        console.print(f"[yellow]⚠ PRs skipped:[/] {e}")
+
+    try:
+        issue_list = fetch_issues(repo, limit=issues)
+        for issue in issue_list:
+            text = f"Issue #{issue.number} ({issue.state}): {issue.title}"
+            if issue.body:
+                text += f"\n{issue.body}"
+            _store(text, type_="bug", source="github_issue")
+        console.print(f"[green]✓[/] Indexed {len(issue_list)} issues")
+    except RuntimeError as e:
+        console.print(f"[yellow]⚠ Issues skipped:[/] {e}")
+
+    console.print(f"\n[bold]Done.[/] Stored: [green]{stored}[/]  Skipped (secret scan): [yellow]{skipped}[/]")
+
+
+@main.command("github-link")
+@click.argument("memory_id")
+@click.argument("commit_sha")
+def github_link(memory_id: str, commit_sha: str):
+    """Link a memory to a specific GitHub commit SHA.
+
+    \b
+    Example:
+      cortec github-link a1b2c3d4 79ac0d5e
+    """
+    db = _db()
+    meta = db.get(memory_id)
+    if not meta:
+        console.print(f"[red]Memory {memory_id} not found.[/]")
+        return
+    updated = db.link_to_commit(memory_id, commit_sha)
+    if updated:
+        console.print(
+            f"[green]✓[/] Memory [bold]{memory_id}[/] linked to commit [bold]{commit_sha}[/]"
+        )
+    else:
+        console.print("[red]Failed to link memory.[/]")
