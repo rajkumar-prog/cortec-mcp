@@ -328,6 +328,43 @@ def index_github_repo(
 
 
 @mcp.tool()
+def link_memory_to_commit(memory_id: str, commit_sha: str) -> dict:
+    """Link an existing memory to a specific GitHub commit SHA."""
+    meta = db.get(memory_id)
+    if not meta:
+        return {"status": "not_found", "memory_id": memory_id}
+    updated = db.link_to_commit(memory_id, commit_sha)
+    if updated:
+        return {
+            "status": "linked",
+            "memory_id": memory_id,
+            "commit_sha": commit_sha,
+            "summary": meta["summary"][:100],
+        }
+    return {"status": "error", "message": "Failed to link memory to commit."}
+
+
+@mcp.tool()
+def commits_for_memory(memory_id: str) -> dict:
+    """Return the commit SHA and any other memories linked to the same commit."""
+    meta = db.get(memory_id)
+    if not meta:
+        return {"status": "not_found", "memory_id": memory_id}
+    sha = meta.get("commit_sha")
+    if not sha:
+        return {"status": "no_commit", "memory_id": memory_id, "message": "No commit linked to this memory."}
+    related = db.get_by_commit(sha)
+    return {
+        "memory_id": memory_id,
+        "commit_sha": sha,
+        "related_memories": [
+            {"id": m["id"], "summary": m["summary"][:100]}
+            for m in related if m["id"] != memory_id
+        ],
+    }
+
+
+@mcp.tool()
 def forget(memory_id: str) -> dict:
     """Permanently delete a memory from both the metadata store and vector index."""
     deleted = db.delete(memory_id)
