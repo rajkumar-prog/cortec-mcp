@@ -82,6 +82,9 @@ Cortec exposes these tools to your coding environment:
 | `summarize_session` | Summarize and archive a session automatically |
 | `list_memories` | Browse stored memories with citations |
 | `project_context` | Load full project memory grouped by type at session start |
+| `index_github_repo` | Index a repo's commits, PRs, and issues as memories |
+| `link_memory_to_commit` | Link a memory to a specific commit SHA |
+| `commits_for_memory` | Find all memories linked to the same commit |
 | `forget` | Permanently delete a memory |
 
 ---
@@ -98,6 +101,8 @@ cortec status
 cortec export
 cortec doctor
 cortec audit
+cortec github-index owner/repo --project myapp
+cortec github-link <memory_id> <commit_sha>
 ```
 
 ---
@@ -118,21 +123,22 @@ Every memory has a confidence score based on its source:
 
 ## Current Status
 
-**Phase 1 and Phase 2 are complete.**
+**Phases 1, 2, and 3 are complete.**
 
-- MCP server running with 6 tools
+- MCP server with 9 tools
 - SQLite metadata store + Chroma vector search
 - Secret scanning (15 patterns), approval mode, conflict detection
-- Full CLI with 11 commands
-- 22 tests passing
+- GitHub integration — index commits, PRs, and issues; link memories to commit SHAs
+- Full CLI with 13 commands
+- 36 tests passing
 - Local-first — no cloud, no telemetry, no external services
 
 ---
 
 ## Roadmap
 
-**Phase 3 — GitHub integration**
-Index your commits, PRs, and issues. Link memories to the code that caused or fixed them.
+**Phase 4 — Stack Overflow pattern store**
+When a Stack Overflow answer helps you fix something, store the pattern locally so you never have to search for it again.
 
 **Phase 4 — Stack Overflow pattern store**
 When a Stack Overflow answer helps you fix something, store the pattern locally so you never have to search for it again.
@@ -142,6 +148,26 @@ Connect memories across projects — bugs, fixes, files, decisions — into a na
 
 **Phase 6 — Agent workflows**
 PR assistant, debugging assistant, and portfolio builder — all powered by your own memory.
+
+---
+
+## GitHub Integration
+
+Index any GitHub repo directly into your memory store:
+
+```bash
+cortec github-index rajkumar-prog/cortec-mcp --project cortec
+```
+
+This pulls recent commits, pull requests, and issues and stores them as searchable memories. Commits get `confidence=0.8` — same as a verified GitHub source.
+
+Link a memory you already have to the commit that caused or fixed it:
+
+```bash
+cortec github-link a1b2c3d4 79ac0d5e
+```
+
+Or use the MCP tools directly from your coding environment — `index_github_repo`, `link_memory_to_commit`, `commits_for_memory`.
 
 ---
 
