@@ -36,7 +36,8 @@ class MetadataStore:
                     conflict_flag INTEGER NOT NULL DEFAULT 0,
                     approved      INTEGER NOT NULL DEFAULT 0,
                     raw_text      TEXT,
-                    commit_sha    TEXT
+                    commit_sha    TEXT,
+                    so_url        TEXT
                 );
 
                 CREATE TABLE IF NOT EXISTS conflicts (
@@ -51,10 +52,12 @@ class MetadataStore:
                 CREATE INDEX IF NOT EXISTS idx_memories_type     ON memories(type);
                 CREATE INDEX IF NOT EXISTS idx_memories_approved ON memories(approved);
             """)
-            # Migrate existing databases that predate the commit_sha column
+            # Migrate existing databases — add columns added after initial schema
             cols = {row[1] for row in conn.execute("PRAGMA table_info(memories)")}
             if "commit_sha" not in cols:
                 conn.execute("ALTER TABLE memories ADD COLUMN commit_sha TEXT")
+            if "so_url" not in cols:
+                conn.execute("ALTER TABLE memories ADD COLUMN so_url TEXT")
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_memories_commit_sha ON memories(commit_sha)"
             )
@@ -71,6 +74,7 @@ class MetadataStore:
         approved: bool = False,
         raw_text: str | None = None,
         commit_sha: str | None = None,
+        so_url: str | None = None,
     ) -> str:
         memory_id = str(uuid.uuid4())[:8]
         now = datetime.now(timezone.utc).isoformat()
@@ -79,8 +83,8 @@ class MetadataStore:
                 """
                 INSERT INTO memories
                   (id, project, type, summary, source, created_at,
-                   confidence, tags, related_files, approved, raw_text, commit_sha)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                   confidence, tags, related_files, approved, raw_text, commit_sha, so_url)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     memory_id, project, type_, summary, source, now,
@@ -90,9 +94,18 @@ class MetadataStore:
                     int(approved),
                     raw_text,
                     commit_sha,
+                    so_url,
                 ),
             )
         return memory_id
+
+    def get_by_so_url(self, so_url: str) -> dict | None:
+        """Return a memory stored from a specific Stack Overflow URL."""
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT * FROM memories WHERE so_url = ?", (so_url,)
+            ).fetchone()
+        return dict(row) if row else None
 
     def link_to_commit(self, memory_id: str, commit_sha: str) -> bool:
         """Attach a commit SHA to an existing memory."""
