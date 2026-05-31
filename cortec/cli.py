@@ -14,7 +14,7 @@ from rich.panel import Panel
 
 from .config import CortecPaths, Confidence, DEFAULT_PROJECT, validate_type
 from .github import fetch_commits, fetch_prs, fetch_issues
-from .stackoverflow import fetch_from_url, build_pattern_summary
+from .stackoverflow import fetch_from_url, build_pattern_summary, canonical_url
 from .storage.db import MetadataStore
 from .storage.vector import VectorStore
 from .security.scanner import scan
@@ -25,11 +25,13 @@ paths = CortecPaths()
 
 
 def _db() -> MetadataStore:
+    """Initialise storage paths and return a MetadataStore instance."""
     paths.init()
     return MetadataStore(paths.db)
 
 
 def _vector() -> VectorStore:
+    """Initialise storage paths and return a VectorStore instance."""
     paths.init()
     return VectorStore(paths.chroma)
 
@@ -375,6 +377,7 @@ def github_index(repo: str, project: str, commits: int, prs: int, issues: int):
     skipped = 0
 
     def _store(summary: str, type_: str, source: str, sha: str | None = None) -> None:
+        """Redact, scan, and insert a single memory, updating stored/skipped counters."""
         nonlocal stored, skipped
         clean = redact(summary)
         if not scan(clean).clean:
@@ -464,6 +467,7 @@ def so_store(url: str, project: str, tags: tuple):
     db = _db()
     vector = _vector()
 
+    url = canonical_url(url)
     existing = db.get_by_so_url(url)
     if existing:
         console.print(f"[yellow]Already stored as memory[/] [bold]{existing['id']}[/]")

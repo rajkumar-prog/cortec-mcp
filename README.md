@@ -182,7 +182,7 @@ When a Stack Overflow answer solves your problem, save it so you never search fo
 cortec so-store https://stackoverflow.com/a/11227902
 ```
 
-Cortec fetches the question and accepted answer, strips the HTML, and stores it as a `pattern` memory with `confidence=0.6`. Later, search it semantically:
+Cortec fetches content from the Stack Overflow URL (answer or question, using the best available answer), strips the HTML, and stores it as a `pattern` memory with `confidence=0.6`. Later, search it semantically:
 
 ```bash
 cortec so-search "close file descriptor python"

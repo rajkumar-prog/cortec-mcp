@@ -36,6 +36,7 @@ class GithubIssue:
 
 
 def _gh_available() -> bool:
+    """Return True if the gh CLI is installed and reachable."""
     try:
         result = subprocess.run(["gh", "--version"], capture_output=True, timeout=5)
         return result.returncode == 0
@@ -44,6 +45,7 @@ def _gh_available() -> bool:
 
 
 def _api(path: str, params: dict | None = None) -> list | dict:
+    """Call the GitHub API via the gh CLI and return parsed JSON."""
     cmd = ["gh", "api", path]
     if params:
         for key, val in params.items():

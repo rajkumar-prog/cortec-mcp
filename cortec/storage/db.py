@@ -11,16 +11,19 @@ from pathlib import Path
 
 class MetadataStore:
     def __init__(self, db_path: Path):
+        """Initialise the store and create the database schema if it does not exist."""
         self.db_path = db_path
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._init()
 
     def _conn(self) -> sqlite3.Connection:
+        """Open and return a new SQLite connection with row_factory set."""
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         return conn
 
     def _init(self):
+        """Create tables, indexes, and run any pending column migrations."""
         with self._conn() as conn:
             conn.executescript("""
                 CREATE TABLE IF NOT EXISTS memories (
@@ -76,6 +79,7 @@ class MetadataStore:
         commit_sha: str | None = None,
         so_url: str | None = None,
     ) -> str:
+        """Insert a new memory record and return its generated ID."""
         memory_id = str(uuid.uuid4())[:8]
         now = datetime.now(timezone.utc).isoformat()
         with self._conn() as conn:
@@ -125,6 +129,7 @@ class MetadataStore:
         return [dict(r) for r in rows]
 
     def approve(self, memory_id: str) -> bool:
+        """Mark a memory as approved. Returns True if the record was found and updated."""
         with self._conn() as conn:
             cur = conn.execute(
                 "UPDATE memories SET approved = 1 WHERE id = ?", (memory_id,)
@@ -132,11 +137,13 @@ class MetadataStore:
         return cur.rowcount > 0
 
     def delete(self, memory_id: str) -> bool:
+        """Delete a memory by ID. Returns True if a record was removed."""
         with self._conn() as conn:
             cur = conn.execute("DELETE FROM memories WHERE id = ?", (memory_id,))
         return cur.rowcount > 0
 
     def get(self, memory_id: str) -> dict | None:
+        """Fetch a single memory by ID, or None if not found."""
         with self._conn() as conn:
             row = conn.execute(
                 "SELECT * FROM memories WHERE id = ?", (memory_id,)
@@ -144,6 +151,7 @@ class MetadataStore:
         return dict(row) if row else None
 
     def list_all(self, project: str | None = None, approved_only: bool = True) -> list[dict]:
+        """Return all memories, optionally filtered by project and approval state."""
         query = "SELECT * FROM memories WHERE 1=1"
         params: list = []
         if project:
@@ -157,6 +165,7 @@ class MetadataStore:
         return [dict(r) for r in rows]
 
     def list_pending(self, project: str | None = None) -> list[dict]:
+        """Return memories that have not been approved yet."""
         query = "SELECT * FROM memories WHERE approved = 0"
         params: list = []
         if project:
@@ -168,6 +177,7 @@ class MetadataStore:
         return [dict(r) for r in rows]
 
     def count(self, project: str | None = None) -> dict:
+        """Return total, pending, approved, and project-scoped memory counts."""
         with self._conn() as conn:
             base = "SELECT COUNT(*) FROM memories"
             total = conn.execute(base).fetchone()[0]
@@ -186,6 +196,7 @@ class MetadataStore:
         }
 
     def flag_conflict(self, memory_id_a: str, description: str) -> str:
+        """Record a conflict for memory_id_a and return the new conflict ID."""
         conflict_id = str(uuid.uuid4())[:8]
         now = datetime.now(timezone.utc).isoformat()
         with self._conn() as conn:
@@ -200,6 +211,7 @@ class MetadataStore:
         return conflict_id
 
     def list_conflicts(self, resolved: bool = False) -> list[dict]:
+        """Return conflicts filtered by resolved state (default: unresolved)."""
         with self._conn() as conn:
             rows = conn.execute(
                 "SELECT * FROM conflicts WHERE resolved = ?", (int(resolved),)

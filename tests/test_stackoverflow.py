@@ -9,6 +9,7 @@ import pytest
 
 from cortec.stackoverflow import (
     parse_so_url,
+    canonical_url,
     build_pattern_summary,
     SOAnswer,
     SOQuestion,
@@ -47,6 +48,28 @@ def test_parse_url_with_query_params():
     kind, id_ = parse_so_url("https://stackoverflow.com/questions/231767/what-does-yield-do?noredirect=1")
     assert kind == "question"
     assert id_ == 231767
+
+
+# ── URL canonicalization ──────────────────────────────────────────────────────
+
+def test_canonical_answer_url():
+    assert canonical_url("https://stackoverflow.com/a/5678") == "https://stackoverflow.com/a/5678"
+
+
+def test_canonical_question_with_anchor_becomes_answer():
+    result = canonical_url("https://stackoverflow.com/questions/1234/title#5678")
+    assert result == "https://stackoverflow.com/a/5678"
+
+
+def test_canonical_question_url():
+    result = canonical_url("https://stackoverflow.com/questions/231767/what-does-yield-do?noredirect=1")
+    assert result == "https://stackoverflow.com/questions/231767"
+
+
+def test_canonical_dedup_same_answer_different_urls():
+    url1 = canonical_url("https://stackoverflow.com/a/11227902")
+    url2 = canonical_url("https://stackoverflow.com/questions/999/title#11227902")
+    assert url1 == url2
 
 
 # ── HTML stripping ────────────────────────────────────────────────────────────

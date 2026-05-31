@@ -18,7 +18,7 @@ from .config import (
 from .conflicts import detect as detect_conflict
 from .github import fetch_commits, fetch_prs, fetch_issues
 from .ingest import archive_session, summarize
-from .stackoverflow import fetch_from_url, build_pattern_summary
+from .stackoverflow import fetch_from_url, build_pattern_summary, canonical_url
 from .security.scanner import scan
 from .security.redactor import redact
 from .storage.db import MetadataStore
@@ -270,6 +270,7 @@ def index_github_repo(
     skipped = []
 
     def _store(summary: str, type_: str, source: str, sha: str | None = None) -> None:
+        """Redact, scan, and store a single memory entry."""
         clean = redact(summary)
         if not scan(clean).clean:
             skipped.append(summary[:60])
@@ -375,6 +376,9 @@ def store_so_pattern(
     Fetch a Stack Overflow answer or question and store it as a pattern memory.
     Provide the full Stack Overflow URL — answer or question link both work.
     """
+    # Normalise to canonical form so /a/123 and /questions/456#123 are treated as the same
+    url = canonical_url(url)
+
     # Check for duplicate
     existing = db.get_by_so_url(url)
     if existing:
@@ -459,6 +463,7 @@ def forget(memory_id: str) -> dict:
 
 
 def serve():
+    """Start the Cortec MCP server."""
     mcp.run()
 
 

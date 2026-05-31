@@ -33,6 +33,7 @@ class Confidence:
 
     @staticmethod
     def from_source(source: str) -> float:
+        """Return the confidence score for the given source string."""
         s = source.lower()
         for keywords, score in Confidence._SOURCE_MAP:
             if any(k in s for k in keywords):
@@ -73,6 +74,7 @@ def validate_type(type_: str) -> str:
 
 class CortecPaths:
     def __init__(self, base: Path | None = None):
+        """Set up storage paths under ~/.cortec or a custom base directory."""
         self.base     = base or Path.home() / ".cortec"
         self.db       = self.base / "cortec.db"
         self.chroma   = self.base / "chroma"
@@ -80,6 +82,7 @@ class CortecPaths:
         self.pending  = self.base / "pending"
 
     def init(self):
+        """Create all required storage directories if they do not exist."""
         for d in [self.base, self.chroma, self.archive, self.pending]:
             d.mkdir(parents=True, exist_ok=True)
 

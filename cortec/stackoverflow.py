@@ -72,6 +72,7 @@ def _strip_html(text: str) -> str:
 
 
 def _get(path: str, params: dict) -> dict:
+    """Call the Stack Exchange API and return the parsed JSON response."""
     params.setdefault("site", _SITE)
     params.setdefault("filter", _FILTER)
     resp = httpx.get(f"{_BASE}{path}", params=params, timeout=15)
@@ -137,6 +138,22 @@ def fetch_question(question_id: int) -> SOQuestion:
         answers=answers,
         url=f"https://stackoverflow.com/questions/{question_id}",
     )
+
+
+def canonical_url(url: str) -> str:
+    """
+    Return the canonical form of a Stack Overflow URL.
+
+    Normalises different URL formats for the same content to a single
+    stable form so that duplicate detection works regardless of how the
+    URL was copied:
+      - answers  → https://stackoverflow.com/a/{id}
+      - questions → https://stackoverflow.com/questions/{id}
+    """
+    kind, id_ = parse_so_url(url)
+    if kind == "answer":
+        return f"https://stackoverflow.com/a/{id_}"
+    return f"https://stackoverflow.com/questions/{id_}"
 
 
 def fetch_from_url(url: str) -> SOAnswer | SOQuestion:
