@@ -30,7 +30,7 @@ class TestMemoryTypes:
         expected = {
             "decision", "bug", "fix", "architecture",
             "preference", "command", "dependency",
-            "portfolio", "resume", "general",
+            "pattern", "portfolio", "resume", "general",
         }
         assert expected == VALID_TYPES
 
