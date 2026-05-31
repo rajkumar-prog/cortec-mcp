@@ -7,6 +7,7 @@ import re
 import html
 import time
 from dataclasses import dataclass
+from urllib.parse import urlparse
 
 import httpx
 
@@ -167,7 +168,12 @@ def canonical_url(url: str) -> str:
     URL was copied:
       - answers  → https://stackoverflow.com/a/{id}
       - questions → https://stackoverflow.com/questions/{id}
+
+    Raises ValueError if the URL hostname is not stackoverflow.com.
     """
+    host = (urlparse(url).hostname or "").lower()
+    if host not in {"stackoverflow.com", "www.stackoverflow.com"}:
+        raise ValueError(f"Cannot parse Stack Overflow URL: {url}")
     kind, id_ = parse_so_url(url)
     if kind == "answer":
         return f"https://stackoverflow.com/a/{id_}"

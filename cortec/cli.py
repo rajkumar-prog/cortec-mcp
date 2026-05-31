@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 import click
+import httpx
 from rich.console import Console
 from rich.table import Table
 from rich import box
@@ -479,8 +480,11 @@ def so_store(url: str, project: str, tags: tuple):
     except ValueError as e:
         console.print(f"[red]✗[/] {e}")
         return
-    except Exception as e:
-        console.print(f"[red]✗ Failed to fetch from Stack Overflow:[/] {e}")
+    except httpx.RequestError as e:
+        console.print(f"[red]✗ Network error:[/] {e}")
+        return
+    except RuntimeError as e:
+        console.print(f"[red]✗[/] {e}")
         return
 
     summary = build_pattern_summary(content)

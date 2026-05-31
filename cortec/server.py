@@ -4,6 +4,7 @@ Cortec MCP server — exposes memory tools to developer workflows.
 
 import json
 
+import httpx
 from fastmcp import FastMCP
 
 from .config import (
@@ -392,8 +393,10 @@ def store_so_pattern(
         content = fetch_from_url(url)
     except ValueError as e:
         return {"status": "error", "reason": str(e)}
-    except Exception as e:
-        return {"status": "error", "reason": f"Failed to fetch from Stack Overflow: {e}"}
+    except httpx.RequestError as e:
+        return {"status": "error", "reason": f"Network error fetching from Stack Overflow: {e}"}
+    except RuntimeError as e:
+        return {"status": "error", "reason": str(e)}
 
     summary = build_pattern_summary(content)
     clean = redact(summary)

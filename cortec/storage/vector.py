@@ -12,6 +12,7 @@ class VectorStore:
     COLLECTION = "cortec_memories"
 
     def __init__(self, chroma_path: Path):
+        """Initialise the Chroma persistent client and get/create the memories collection."""
         chroma_path.mkdir(parents=True, exist_ok=True)
         self._client = chromadb.PersistentClient(
             path=str(chroma_path),
@@ -23,6 +24,7 @@ class VectorStore:
         )
 
     def add(self, memory_id: str, text: str, metadata: dict | None = None) -> None:
+        """Upsert a memory document into the vector index."""
         self._col.upsert(
             ids=[memory_id],
             documents=[text],
@@ -30,6 +32,7 @@ class VectorStore:
         )
 
     def delete(self, memory_id: str) -> None:
+        """Remove a memory from the vector index by ID."""
         self._col.delete(ids=[memory_id])
 
     def search(
@@ -39,6 +42,7 @@ class VectorStore:
         project: str | None = None,
         type_: str | None = None,
     ) -> list[dict]:
+        """Semantic search over stored memories, optionally filtered by project and type."""
         filters = []
         if project:
             filters.append({"project": project})
@@ -74,4 +78,5 @@ class VectorStore:
         return hits
 
     def count(self) -> int:
+        """Return the number of documents currently in the vector index."""
         return self._col.count()
