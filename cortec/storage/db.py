@@ -64,6 +64,9 @@ class MetadataStore:
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_memories_commit_sha ON memories(commit_sha)"
             )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_memories_so_url ON memories(so_url)"
+            )
 
     def insert(
         self,

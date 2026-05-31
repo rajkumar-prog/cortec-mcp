@@ -5,6 +5,7 @@ No API key required for read-only access (300 requests/day unauthenticated).
 
 import re
 import html
+import time
 from dataclasses import dataclass
 
 import httpx
@@ -72,12 +73,29 @@ def _strip_html(text: str) -> str:
 
 
 def _get(path: str, params: dict) -> dict:
-    """Call the Stack Exchange API and return the parsed JSON response."""
+    """
+    Call the Stack Exchange API and return the parsed JSON response.
+
+    Respects the Stack Exchange backoff directive — if the response contains
+    a ``backoff`` field, the function sleeps for that many seconds before
+    returning so subsequent calls are not rate-limited. Raises a clear error
+    if the daily quota has been exhausted.
+    """
     params.setdefault("site", _SITE)
     params.setdefault("filter", _FILTER)
     resp = httpx.get(f"{_BASE}{path}", params=params, timeout=15)
     resp.raise_for_status()
-    return resp.json()
+    data = resp.json()
+
+    if backoff := data.get("backoff"):
+        time.sleep(int(backoff))
+
+    if data.get("quota_remaining", 1) == 0:
+        raise RuntimeError(
+            "Stack Exchange API daily quota exhausted. Try again tomorrow."
+        )
+
+    return data
 
 
 def fetch_answer(answer_id: int) -> SOAnswer:
