@@ -14,6 +14,7 @@ from rich.panel import Panel
 
 from .config import CortecPaths, Confidence, DEFAULT_PROJECT, validate_type
 from .github import fetch_commits, fetch_prs, fetch_issues
+from .stackoverflow import fetch_from_url, build_pattern_summary
 from .storage.db import MetadataStore
 from .storage.vector import VectorStore
 from .security.scanner import scan
@@ -446,3 +447,92 @@ def github_link(memory_id: str, commit_sha: str):
         )
     else:
         console.print("[red]Failed to link memory.[/]")
+
+
+@main.command("so-store")
+@click.argument("url")
+@click.option("--project", "-p", default=DEFAULT_PROJECT, help="Project to store the pattern under.")
+@click.option("--tags", multiple=True, help="Tags (repeatable).")
+def so_store(url: str, project: str, tags: tuple):
+    """Fetch a Stack Overflow answer or question and store it as a pattern memory.
+
+    \b
+    Example:
+      cortec so-store https://stackoverflow.com/a/11227902
+      cortec so-store https://stackoverflow.com/questions/231767/what-does-the-yield-keyword-do
+    """
+    db = _db()
+    vector = _vector()
+
+    existing = db.get_by_so_url(url)
+    if existing:
+        console.print(f"[yellow]Already stored as memory[/] [bold]{existing['id']}[/]")
+        return
+
+    console.print(f"Fetching [cyan]{url}[/] ...")
+    try:
+        content = fetch_from_url(url)
+    except ValueError as e:
+        console.print(f"[red]✗[/] {e}")
+        return
+    except Exception as e:
+        console.print(f"[red]✗ Failed to fetch from Stack Overflow:[/] {e}")
+        return
+
+    summary = build_pattern_summary(content)
+    clean = redact(summary)
+
+    if not scan(clean).clean:
+        console.print("[red]✗ Secret scan failed on fetched content.[/]")
+        return
+
+    console.print(Panel(clean[:400], title="Pattern to store", border_style="yellow"))
+    if not click.confirm("Store this pattern?"):
+        console.print("[yellow]Cancelled.[/]")
+        return
+
+    memory_id = db.insert(
+        summary=clean,
+        project=project,
+        type_="pattern",
+        source="stackoverflow",
+        confidence=Confidence.STACKOVERFLOW,
+        tags=list(tags),
+        approved=True,
+        so_url=url,
+    )
+    vector.add(memory_id, clean, {"project": project, "type": "pattern", "source": "stackoverflow"})
+    console.print(f"[green]✓[/] Pattern stored as memory [bold]{memory_id}[/]  (confidence: {Confidence.STACKOVERFLOW})")
+
+
+@main.command("so-search")
+@click.argument("query")
+@click.option("--project", "-p", default=None, help="Limit to a project.")
+@click.option("--top", "-n", default=5, help="Number of results.")
+def so_search(query: str, project: str | None, top: int):
+    """Search stored Stack Overflow patterns by query."""
+    db = _db()
+    vector = _vector()
+
+    if vector.count() == 0:
+        console.print("[yellow]No memories stored yet.[/]")
+        return
+
+    hits = vector.search(query, top_k=top, project=project, type_="pattern")
+    if not hits:
+        console.print(f"[yellow]No patterns found for:[/] {query}")
+        return
+
+    for hit in hits:
+        meta = db.get(hit["id"])
+        if not meta:
+            continue
+        so_url = meta.get("so_url") or ""
+        console.print(
+            Panel(
+                hit["document"][:300],
+                title=f"[bold]{hit['id']}[/]  score={hit['score']}",
+                subtitle=f"source=stackoverflow  {so_url}  {meta['created_at'][:10]}",
+                border_style="cyan",
+            )
+        )
