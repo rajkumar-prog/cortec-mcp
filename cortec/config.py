@@ -50,6 +50,7 @@ MEMORY_TYPES = {
     "preference":   "A personal or team preference (style, tooling, workflow).",
     "command":      "A useful CLI command or script worth remembering.",
     "dependency":   "A library, package, or external dependency decision.",
+    "pattern":      "A reusable solution pattern, often sourced from Stack Overflow.",
     "portfolio":    "Something worth highlighting in a portfolio or showcase.",
     "resume":       "An achievement or skill worth adding to a resume.",
     "general":      "General note that does not fit other categories.",
