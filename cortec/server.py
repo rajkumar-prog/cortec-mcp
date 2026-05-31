@@ -419,6 +419,35 @@ def store_so_pattern(
 
 
 @mcp.tool()
+def recall_patterns(
+    query: str,
+    project: str | None = None,
+    top_k: int = RECALL_TOP_K,
+) -> dict:
+    """Search stored Stack Overflow patterns semantically. Returns patterns with source URLs."""
+    if vector.count() == 0:
+        return {"results": [], "message": "No memories stored yet."}
+
+    hits = vector.search(query=query, top_k=top_k, project=project, type_="pattern")
+    results = []
+    for hit in hits:
+        meta = db.get(hit["id"])
+        if not meta:
+            continue
+        results.append({
+            "id": hit["id"],
+            "summary": hit["document"],
+            "score": hit["score"],
+            "so_url": meta.get("so_url"),
+            "confidence": meta.get("confidence"),
+            "project": meta.get("project"),
+            "created_at": meta.get("created_at", "")[:10],
+        })
+
+    return {"query": query, "results": results, "count": len(results)}
+
+
+@mcp.tool()
 def forget(memory_id: str) -> dict:
     """Permanently delete a memory from both the metadata store and vector index."""
     deleted = db.delete(memory_id)
