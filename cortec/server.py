@@ -18,6 +18,7 @@ from .config import (
 from .conflicts import detect as detect_conflict
 from .github import fetch_commits, fetch_prs, fetch_issues
 from .ingest import archive_session, summarize
+from .stackoverflow import fetch_from_url, build_pattern_summary
 from .security.scanner import scan
 from .security.redactor import redact
 from .storage.db import MetadataStore
@@ -361,6 +362,59 @@ def commits_for_memory(memory_id: str) -> dict:
             {"id": m["id"], "summary": m["summary"][:100]}
             for m in related if m["id"] != memory_id
         ],
+    }
+
+
+@mcp.tool()
+def store_so_pattern(
+    url: str,
+    project: str = DEFAULT_PROJECT,
+    tags: list[str] | None = None,
+) -> dict:
+    """
+    Fetch a Stack Overflow answer or question and store it as a pattern memory.
+    Provide the full Stack Overflow URL — answer or question link both work.
+    """
+    # Check for duplicate
+    existing = db.get_by_so_url(url)
+    if existing:
+        return {
+            "status": "duplicate",
+            "memory_id": existing["id"],
+            "message": f"This URL is already stored as memory {existing['id']}.",
+        }
+
+    try:
+        content = fetch_from_url(url)
+    except ValueError as e:
+        return {"status": "error", "reason": str(e)}
+    except Exception as e:
+        return {"status": "error", "reason": f"Failed to fetch from Stack Overflow: {e}"}
+
+    summary = build_pattern_summary(content)
+    clean = redact(summary)
+
+    if not scan(clean).clean:
+        return {"status": "blocked", "reason": "Secret scan failed on fetched content."}
+
+    memory_id = db.insert(
+        summary=clean,
+        project=project,
+        type_="pattern",
+        source="stackoverflow",
+        confidence=Confidence.STACKOVERFLOW,
+        tags=tags or [],
+        approved=True,
+        so_url=url,
+    )
+    vector.add(memory_id, clean, {"project": project, "type": "pattern", "source": "stackoverflow"})
+
+    return {
+        "status": "stored",
+        "memory_id": memory_id,
+        "url": url,
+        "summary": clean[:200],
+        "confidence": Confidence.STACKOVERFLOW,
     }
 
 
