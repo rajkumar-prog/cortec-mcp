@@ -65,6 +65,7 @@ cortec doctor
 | `preference` | A personal or team preference |
 | `command` | A useful CLI command worth remembering |
 | `dependency` | A library or package decision |
+| `pattern` | A reusable solution pattern, often from Stack Overflow |
 | `portfolio` | Something worth showcasing |
 | `resume` | An achievement or skill |
 | `general` | Anything else |
@@ -85,6 +86,8 @@ Cortec exposes these tools to your coding environment:
 | `index_github_repo` | Index a repo's commits, PRs, and issues as memories |
 | `link_memory_to_commit` | Link a memory to a specific commit SHA |
 | `commits_for_memory` | Find all memories linked to the same commit |
+| `store_so_pattern` | Fetch a Stack Overflow answer and store it as a pattern |
+| `recall_patterns` | Semantic search over stored Stack Overflow patterns |
 | `forget` | Permanently delete a memory |
 
 ---
@@ -103,6 +106,8 @@ cortec doctor
 cortec audit
 cortec github-index owner/repo --project myapp
 cortec github-link <memory_id> <commit_sha>
+cortec so-store https://stackoverflow.com/a/11227902
+cortec so-search "async generator pattern"
 ```
 
 ---
@@ -123,22 +128,20 @@ Every memory has a confidence score based on its source:
 
 ## Current Status
 
-**Phases 1, 2, and 3 are complete.**
+**Phases 1, 2, 3, and 4 are complete.**
 
-- MCP server with 9 tools
+- MCP server with 11 tools
 - SQLite metadata store + Chroma vector search
 - Secret scanning (15 patterns), approval mode, conflict detection
 - GitHub integration — index commits, PRs, and issues; link memories to commit SHAs
-- Full CLI with 13 commands
-- 36 tests passing
+- Stack Overflow pattern store — fetch answers by URL, store and search locally
+- Full CLI with 15 commands
+- 53 tests passing
 - Local-first — no cloud, no telemetry, no external services
 
 ---
 
 ## Roadmap
-
-**Phase 4 — Stack Overflow pattern store**
-When a Stack Overflow answer helps you fix something, store the pattern locally so you never have to search for it again.
 
 **Phase 4 — Stack Overflow pattern store**
 When a Stack Overflow answer helps you fix something, store the pattern locally so you never have to search for it again.
@@ -168,6 +171,24 @@ cortec github-link a1b2c3d4 79ac0d5e
 ```
 
 Or use the MCP tools directly from your coding environment — `index_github_repo`, `link_memory_to_commit`, `commits_for_memory`.
+
+---
+
+## Stack Overflow Pattern Store
+
+When a Stack Overflow answer solves your problem, save it so you never search for it again:
+
+```bash
+cortec so-store https://stackoverflow.com/a/11227902
+```
+
+Cortec fetches content from the Stack Overflow URL (answer or question, using the best available answer), strips the HTML, and stores it as a `pattern` memory with `confidence=0.6`. Later, search it semantically:
+
+```bash
+cortec so-search "close file descriptor python"
+```
+
+Or use the MCP tools directly — `store_so_pattern` and `recall_patterns` — from inside your coding environment.
 
 ---
 

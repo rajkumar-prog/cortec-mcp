@@ -4,6 +4,7 @@ Cortec MCP server — exposes memory tools to developer workflows.
 
 import json
 
+import httpx
 from fastmcp import FastMCP
 
 from .config import (
@@ -18,6 +19,7 @@ from .config import (
 from .conflicts import detect as detect_conflict
 from .github import fetch_commits, fetch_prs, fetch_issues
 from .ingest import archive_session, summarize
+from .stackoverflow import fetch_from_url, build_pattern_summary, canonical_url
 from .security.scanner import scan
 from .security.redactor import redact
 from .storage.db import MetadataStore
@@ -269,6 +271,7 @@ def index_github_repo(
     skipped = []
 
     def _store(summary: str, type_: str, source: str, sha: str | None = None) -> None:
+        """Redact, scan, and store a single memory entry."""
         clean = redact(summary)
         if not scan(clean).clean:
             skipped.append(summary[:60])
@@ -365,6 +368,93 @@ def commits_for_memory(memory_id: str) -> dict:
 
 
 @mcp.tool()
+def store_so_pattern(
+    url: str,
+    project: str = DEFAULT_PROJECT,
+    tags: list[str] | None = None,
+) -> dict:
+    """
+    Fetch a Stack Overflow answer or question and store it as a pattern memory.
+    Provide the full Stack Overflow URL — answer or question link both work.
+    """
+    # Normalise to canonical form so /a/123 and /questions/456#123 are treated as the same
+    url = canonical_url(url)
+
+    # Check for duplicate
+    existing = db.get_by_so_url(url)
+    if existing:
+        return {
+            "status": "duplicate",
+            "memory_id": existing["id"],
+            "message": f"This URL is already stored as memory {existing['id']}.",
+        }
+
+    try:
+        content = fetch_from_url(url)
+    except ValueError as e:
+        return {"status": "error", "reason": str(e)}
+    except httpx.RequestError as e:
+        return {"status": "error", "reason": f"Network error fetching from Stack Overflow: {e}"}
+    except RuntimeError as e:
+        return {"status": "error", "reason": str(e)}
+
+    summary = build_pattern_summary(content)
+    clean = redact(summary)
+
+    if not scan(clean).clean:
+        return {"status": "blocked", "reason": "Secret scan failed on fetched content."}
+
+    memory_id = db.insert(
+        summary=clean,
+        project=project,
+        type_="pattern",
+        source="stackoverflow",
+        confidence=Confidence.STACKOVERFLOW,
+        tags=tags or [],
+        approved=True,
+        so_url=url,
+    )
+    vector.add(memory_id, clean, {"project": project, "type": "pattern", "source": "stackoverflow"})
+
+    return {
+        "status": "stored",
+        "memory_id": memory_id,
+        "url": url,
+        "summary": clean[:200],
+        "confidence": Confidence.STACKOVERFLOW,
+    }
+
+
+@mcp.tool()
+def recall_patterns(
+    query: str,
+    project: str | None = None,
+    top_k: int = RECALL_TOP_K,
+) -> dict:
+    """Search stored Stack Overflow patterns semantically. Returns patterns with source URLs."""
+    if vector.count() == 0:
+        return {"results": [], "message": "No memories stored yet."}
+
+    hits = vector.search(query=query, top_k=top_k, project=project, type_="pattern")
+    results = []
+    for hit in hits:
+        meta = db.get(hit["id"])
+        if not meta:
+            continue
+        results.append({
+            "id": hit["id"],
+            "summary": hit["document"],
+            "score": hit["score"],
+            "so_url": meta.get("so_url"),
+            "confidence": meta.get("confidence"),
+            "project": meta.get("project"),
+            "created_at": meta.get("created_at", "")[:10],
+        })
+
+    return {"query": query, "results": results, "count": len(results)}
+
+
+@mcp.tool()
 def forget(memory_id: str) -> dict:
     """Permanently delete a memory from both the metadata store and vector index."""
     deleted = db.delete(memory_id)
@@ -376,6 +466,7 @@ def forget(memory_id: str) -> dict:
 
 
 def serve():
+    """Start the Cortec MCP server."""
     mcp.run()
 
 

@@ -40,6 +40,7 @@ _TECH_PATTERN = re.compile(
 
 
 def _extract_tech(text: str) -> set[str]:
+    """Extract all recognised technology names from text as a lowercase set."""
     return {m.lower() for m in _TECH_PATTERN.findall(text)}
 
 

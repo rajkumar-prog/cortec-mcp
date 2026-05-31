@@ -13,6 +13,7 @@ class ScanResult:
     findings: list[str]
 
     def __bool__(self) -> bool:
+        """Return True if no secrets were found (i.e. the text is clean)."""
         return self.clean
 
 
