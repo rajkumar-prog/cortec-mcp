@@ -35,9 +35,9 @@ phase: 1
 - No telemetry, no analytics, no cloud sync
 
 ## Phase Roadmap
-- Phase 1: MCP server + RAG + CLI (current)
+- Phase 1: MCP server + RAG + CLI
 - Phase 2: Project memory types + conflict detection
 - Phase 3: GitHub integration
 - Phase 4: Stack Overflow pattern store
 - Phase 5: Knowledge graph
-- Phase 6: Agent workflows
+- Phase 6: Agent workflows (current)

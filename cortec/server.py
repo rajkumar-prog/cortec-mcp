@@ -16,6 +16,12 @@ from .config import (
     RECALL_TOP_K,
     validate_type,
 )
+from .agents import (
+    review_pr as _review_pr,
+    debug_assist as _debug_assist,
+    build_portfolio as _build_portfolio,
+    render_portfolio_markdown,
+)
 from .conflicts import detect as detect_conflict
 from .github import fetch_commits, fetch_prs, fetch_issues
 from .ingest import archive_session, summarize
@@ -452,6 +458,109 @@ def recall_patterns(
         })
 
     return {"query": query, "results": results, "count": len(results)}
+
+
+@mcp.tool()
+def review_pr(
+    diff: str,
+    project: str | None = None,
+    top_k: int = 5,
+) -> dict:
+    """Review a PR diff against stored memories. Returns findings from past decisions, bugs, fixes, and patterns that relate to the change."""
+    result = _review_pr(diff=diff, db=db, vector=vector, project=project, top_k=top_k)
+
+    findings = []
+    for f in result.findings:
+        findings.append({
+            "memory_id": f.memory_id,
+            "summary": f.summary[:200],
+            "relevance_score": f.relevance_score,
+            "type": f.memory_type,
+            "confidence": f.confidence,
+            "suggestion": f.suggestion,
+        })
+
+    return {
+        "findings": findings,
+        "files_analyzed": result.files_analyzed,
+        "memories_consulted": result.memories_consulted,
+        "count": len(findings),
+    }
+
+
+@mcp.tool()
+def debug_assist(
+    error: str,
+    project: str | None = None,
+    top_k: int = 5,
+) -> dict:
+    """Search memories for bugs, fixes, and patterns related to an error or issue description. Returns past solutions and relevant patterns."""
+    result = _debug_assist(error=error, db=db, vector=vector, project=project, top_k=top_k)
+
+    suggestions = []
+    for s in result.suggestions:
+        suggestions.append({
+            "memory_id": s.memory_id,
+            "summary": s.summary[:200],
+            "relevance_score": s.relevance_score,
+            "type": s.memory_type,
+            "confidence": s.confidence,
+            "source": s.source,
+        })
+
+    patterns = []
+    for p in result.patterns:
+        patterns.append({
+            "memory_id": p.memory_id,
+            "summary": p.summary[:200],
+            "relevance_score": p.relevance_score,
+            "confidence": p.confidence,
+            "source": p.source,
+        })
+
+    return {
+        "suggestions": suggestions,
+        "patterns": patterns,
+        "memories_consulted": result.memories_consulted,
+        "suggestion_count": len(suggestions),
+        "pattern_count": len(patterns),
+    }
+
+
+@mcp.tool()
+def build_portfolio(
+    project: str | None = None,
+    format: str = "json",
+) -> dict:
+    """Build a developer portfolio from stored portfolio and resume memories. Returns structured entries or a Markdown document."""
+    result = _build_portfolio(db=db, project=project)
+
+    if format == "markdown":
+        return {
+            "format": "markdown",
+            "markdown": render_portfolio_markdown(result),
+            "total": result.total,
+            "projects": result.projects,
+        }
+
+    entries = []
+    for e in result.entries:
+        entries.append({
+            "memory_id": e.memory_id,
+            "summary": e.summary,
+            "type": e.memory_type,
+            "project": e.project,
+            "confidence": e.confidence,
+            "created_at": e.created_at,
+            "tags": e.tags,
+        })
+
+    return {
+        "format": "json",
+        "entries": entries,
+        "total": result.total,
+        "projects": result.projects,
+    }
 
 
 @mcp.tool()

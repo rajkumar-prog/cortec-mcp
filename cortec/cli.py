@@ -13,6 +13,12 @@ from rich.table import Table
 from rich import box
 from rich.panel import Panel
 
+from .agents import (
+    review_pr as _review_pr,
+    debug_assist as _debug_assist,
+    build_portfolio as _build_portfolio,
+    render_portfolio_markdown,
+)
 from .config import CortecPaths, Confidence, DEFAULT_PROJECT, validate_type
 from .github import fetch_commits, fetch_prs, fetch_issues
 from .stackoverflow import fetch_from_url, build_pattern_summary, canonical_url
@@ -544,3 +550,163 @@ def so_search(query: str, project: str | None, top: int):
                 border_style="cyan",
             )
         )
+
+
+# ── Agent workflows ──────────────────────────────────────────────────────────
+
+@main.command("review-pr")
+@click.argument("diff_source")
+@click.option("--project", "-p", default=None, help="Limit review to a project.")
+@click.option("--top", "-n", default=5, help="Max findings per category.")
+def review_pr(diff_source: str, project: str | None, top: int):
+    """Review a PR diff against stored memories.
+
+    \b
+    DIFF_SOURCE can be:
+      - A file path containing a diff (e.g. changes.patch)
+      - A dash (-) to read from stdin
+      - Literal diff text
+
+    \b
+    Examples:
+      git diff main..HEAD | cortec review-pr -
+      cortec review-pr changes.patch --project myapp
+    """
+    db = _db()
+    vector = _vector()
+
+    if diff_source == "-":
+        diff = sys.stdin.read()
+    elif Path(diff_source).is_file():
+        diff = Path(diff_source).read_text()
+    else:
+        diff = diff_source
+
+    if not diff.strip():
+        console.print("[yellow]No diff content provided.[/]")
+        return
+
+    result = _review_pr(diff=diff, db=db, vector=vector, project=project, top_k=top)
+
+    if not result.findings:
+        console.print("[green]No related memories found for this diff.[/]")
+        if result.files_analyzed:
+            console.print(f"  Files checked: {', '.join(result.files_analyzed)}")
+        return
+
+    if result.files_analyzed:
+        console.print(f"\n[bold]Files in diff:[/] {', '.join(result.files_analyzed)}")
+
+    console.print(f"[bold]Memories consulted:[/] {result.memories_consulted}\n")
+
+    for f in result.findings:
+        color = "red" if f.memory_type in ("bug",) else "yellow" if f.memory_type in ("fix", "decision") else "cyan"
+        console.print(
+            Panel(
+                f"{f.summary[:300]}\n\n[dim]{f.suggestion}[/]",
+                title=f"[bold]{f.memory_id}[/]  score={f.relevance_score}  type={f.memory_type}  confidence={f.confidence}",
+                border_style=color,
+            )
+        )
+
+
+@main.command()
+@click.argument("error")
+@click.option("--project", "-p", default=None, help="Limit to a project.")
+@click.option("--top", "-n", default=5, help="Number of results per category.")
+def debug(error: str, project: str | None, top: int):
+    """Search memories for bugs, fixes, and patterns related to an error.
+
+    \b
+    Examples:
+      cortec debug "TypeError: cannot unpack non-sequence NoneType"
+      cortec debug "connection refused on port 5432" --project myapp
+    """
+    db = _db()
+    vector = _vector()
+
+    result = _debug_assist(error=error, db=db, vector=vector, project=project, top_k=top)
+
+    if not result.suggestions and not result.patterns:
+        console.print("[yellow]No related memories found.[/]")
+        return
+
+    console.print(f"[bold]Memories consulted:[/] {result.memories_consulted}\n")
+
+    if result.suggestions:
+        console.print("[bold]Related bugs & fixes:[/]\n")
+        for s in result.suggestions:
+            color = "red" if s.memory_type == "bug" else "green"
+            console.print(
+                Panel(
+                    s.summary[:300],
+                    title=f"[bold]{s.memory_id}[/]  score={s.relevance_score}  type={s.memory_type}  confidence={s.confidence}",
+                    subtitle=f"source={s.source}",
+                    border_style=color,
+                )
+            )
+
+    if result.patterns:
+        console.print("[bold]Related patterns:[/]\n")
+        for p in result.patterns:
+            console.print(
+                Panel(
+                    p.summary[:300],
+                    title=f"[bold]{p.memory_id}[/]  score={p.relevance_score}  confidence={p.confidence}",
+                    subtitle=f"source={p.source}",
+                    border_style="cyan",
+                )
+            )
+
+
+@main.command()
+@click.option("--project", "-p", default=None, help="Filter by project.")
+@click.option("--format", "-f", "fmt", type=click.Choice(["table", "markdown"]), default="table", help="Output format.")
+@click.option("--out", "-o", default=None, help="Write markdown to a file.")
+def portfolio(project: str | None, fmt: str, out: str | None):
+    """Build a portfolio from stored portfolio and resume memories.
+
+    \b
+    Examples:
+      cortec portfolio
+      cortec portfolio --project myapp --format markdown
+      cortec portfolio --format markdown --out portfolio.md
+    """
+    db = _db()
+    result = _build_portfolio(db=db, project=project)
+
+    if not result.entries:
+        console.print("[yellow]No portfolio or resume entries found.[/]")
+        console.print("Store memories with --type portfolio or --type resume first.")
+        return
+
+    if fmt == "markdown":
+        md = render_portfolio_markdown(result)
+        if out:
+            Path(out).write_text(md)
+            console.print(f"[green]Portfolio written to[/] [bold]{out}[/]")
+        else:
+            console.print(md)
+        return
+
+    table = Table(title="Portfolio", box=box.ROUNDED, border_style="green")
+    table.add_column("ID", style="bold")
+    table.add_column("Type")
+    table.add_column("Project")
+    table.add_column("Summary")
+    table.add_column("Tags")
+    table.add_column("Date")
+
+    for e in result.entries:
+        tag_str = ", ".join(e.tags) if e.tags else ""
+        table.add_row(
+            e.memory_id,
+            e.memory_type,
+            e.project,
+            e.summary[:80] + ("..." if len(e.summary) > 80 else ""),
+            tag_str,
+            e.created_at,
+        )
+
+    console.print(table)
+    console.print(f"\n[bold]{result.total}[/] entries across [bold]{len(result.projects)}[/] project(s)")

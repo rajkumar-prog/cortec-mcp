@@ -88,6 +88,9 @@ Cortec exposes these tools to your coding environment:
 | `commits_for_memory` | Find all memories linked to the same commit |
 | `store_so_pattern` | Fetch a Stack Overflow answer and store it as a pattern |
 | `recall_patterns` | Semantic search over stored Stack Overflow patterns |
+| `review_pr` | Review a PR diff against stored memories for context-aware findings |
+| `debug_assist` | Search memories for bugs, fixes, and patterns related to an error |
+| `build_portfolio` | Build a portfolio from stored portfolio and resume memories |
 | `forget` | Permanently delete a memory |
 
 ---
@@ -108,6 +111,9 @@ cortec github-index owner/repo --project myapp
 cortec github-link <memory_id> <commit_sha>
 cortec so-store https://stackoverflow.com/a/11227902
 cortec so-search "async generator pattern"
+cortec review-pr changes.patch --project myapp
+cortec debug "TypeError: cannot unpack non-sequence NoneType"
+cortec portfolio --format markdown --out portfolio.md
 ```
 
 ---
@@ -128,15 +134,16 @@ Every memory has a confidence score based on its source:
 
 ## Current Status
 
-**Phases 1, 2, 3, and 4 are complete.**
+**Phases 1, 2, 3, 4, and 6 are complete.**
 
-- MCP server with 11 tools
+- MCP server with 14 tools
 - SQLite metadata store + Chroma vector search
 - Secret scanning (15 patterns), approval mode, conflict detection
 - GitHub integration — index commits, PRs, and issues; link memories to commit SHAs
 - Stack Overflow pattern store — fetch answers by URL, store and search locally
-- Full CLI with 15 commands
-- 53 tests passing
+- Agent workflows — PR review, debug assistant, and portfolio builder
+- Full CLI with 18 commands
+- 84 tests passing
 - Local-first — no cloud, no telemetry, no external services
 
 ---
@@ -149,8 +156,48 @@ When a Stack Overflow answer helps you fix something, store the pattern locally 
 **Phase 5 — Knowledge graph**
 Connect memories across projects — bugs, fixes, files, decisions — into a navigable graph. Ask "what else is related to this?" and get real answers.
 
-**Phase 6 — Agent workflows**
+**Phase 6 — Agent workflows** *(complete)*
 PR assistant, debugging assistant, and portfolio builder — all powered by your own memory.
+
+---
+
+## Agent Workflows
+
+### PR Review Assistant
+
+Review any PR diff against your stored memories — decisions, architecture, bugs, fixes, and patterns are surfaced as findings:
+
+```bash
+git diff main..HEAD | cortec review-pr -
+cortec review-pr changes.patch --project myapp
+```
+
+Each finding cites the original memory and provides a suggestion (e.g. "A similar bug was encountered before — check if this reintroduces it.").
+
+### Debug Assistant
+
+When you hit an error, search your memory for related bugs, fixes, and patterns:
+
+```bash
+cortec debug "TypeError: cannot unpack non-sequence NoneType"
+cortec debug "connection refused on port 5432" --project myapp
+```
+
+Returns past bugs and fixes separately from reusable patterns, sorted by relevance.
+
+### Portfolio Builder
+
+Build a developer portfolio from your stored portfolio and resume memories:
+
+```bash
+cortec portfolio
+cortec portfolio --project myapp --format markdown
+cortec portfolio --format markdown --out portfolio.md
+```
+
+Collects entries across all projects, grouped by project, with achievements and project highlights labeled separately.
+
+Or use the MCP tools directly — `review_pr`, `debug_assist`, `build_portfolio` — from inside your coding environment.
 
 ---
 
