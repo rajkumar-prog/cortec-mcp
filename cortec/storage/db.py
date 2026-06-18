@@ -40,7 +40,8 @@ class MetadataStore:
                     approved      INTEGER NOT NULL DEFAULT 0,
                     raw_text      TEXT,
                     commit_sha    TEXT,
-                    so_url        TEXT
+                    so_url        TEXT,
+                    related_to    TEXT NOT NULL DEFAULT '[]'
                 );
 
                 CREATE TABLE IF NOT EXISTS conflicts (
@@ -67,6 +68,9 @@ class MetadataStore:
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_memories_so_url ON memories(so_url)"
             )
+            cols = {row[1] for row in conn.execute("PRAGMA table_info(memories)")}
+            if "related_to" not in cols:
+                conn.execute("ALTER TABLE memories ADD COLUMN related_to TEXT NOT NULL DEFAULT '[]'")
 
     def insert(
         self,
@@ -81,6 +85,7 @@ class MetadataStore:
         raw_text: str | None = None,
         commit_sha: str | None = None,
         so_url: str | None = None,
+        related_to: list[str] | None = None,
     ) -> str:
         """Insert a new memory record and return its generated ID."""
         memory_id = str(uuid.uuid4())[:8]
@@ -90,8 +95,9 @@ class MetadataStore:
                 """
                 INSERT INTO memories
                   (id, project, type, summary, source, created_at,
-                   confidence, tags, related_files, approved, raw_text, commit_sha, so_url)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                   confidence, tags, related_files, approved, raw_text,
+                   commit_sha, so_url, related_to)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     memory_id, project, type_, summary, source, now,
@@ -102,9 +108,43 @@ class MetadataStore:
                     raw_text,
                     commit_sha,
                     so_url,
+                    json.dumps(related_to or []),
                 ),
             )
         return memory_id
+
+    def link_memories(self, memory_id_a: str, memory_id_b: str) -> bool:
+        """Bidirectionally link two memories so each appears in the other's related_to list."""
+        def _add_link(src: str, dst: str) -> bool:
+            row = self.get(src)
+            if not row:
+                return False
+            current = json.loads(row.get("related_to") or "[]")
+            if dst not in current:
+                current.append(dst)
+            with self._conn() as conn:
+                conn.execute(
+                    "UPDATE memories SET related_to = ? WHERE id = ?",
+                    (json.dumps(current), src),
+                )
+            return True
+
+        ok_a = _add_link(memory_id_a, memory_id_b)
+        ok_b = _add_link(memory_id_b, memory_id_a)
+        return ok_a and ok_b
+
+    def get_related(self, memory_id: str) -> list[dict]:
+        """Return all memories explicitly linked to the given memory ID."""
+        row = self.get(memory_id)
+        if not row:
+            return []
+        related_ids = json.loads(row.get("related_to") or "[]")
+        results = []
+        for rid in related_ids:
+            m = self.get(rid)
+            if m:
+                results.append(m)
+        return results
 
     def get_by_so_url(self, so_url: str) -> dict | None:
         """Return a memory stored from a specific Stack Overflow URL."""
