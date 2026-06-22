@@ -2,7 +2,7 @@
 
 **Local-first memory server for developer workflows.**
 
-Cortec runs as an MCP server inside your coding environment. It remembers your project decisions, bugs, fixes, and session context — and retrieves exactly the right memory when you need it. Everything stays on your machine.
+Cortec runs as an MCP server inside your coding environment. It remembers your project decisions, bugs, fixes, and session context and retrieves exactly the right memory when you need it. Everything stays on your machine.
 
 ---
 
