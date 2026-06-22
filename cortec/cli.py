@@ -654,7 +654,7 @@ def graph_link(memory_id_a: str, memory_id_b: str):
 @main.command("pr-draft")
 @click.option("--project", "-p", default=DEFAULT_PROJECT, help="Project name.")
 @click.option("--context", "-c", default="", help="Optional description of the change.")
-@click.option("--top", "-n", default=8, help="Number of semantic results to surface.")
+@click.option("--top", "-n", default=8, type=click.IntRange(min=1), help="Number of semantic results to surface.")
 def pr_draft(project: str, context: str, top: int):
     """Draft a PR summary from project memory — decisions, fixes, and bugs.
 
@@ -689,7 +689,7 @@ def pr_draft(project: str, context: str, top: int):
 @main.command("debug")
 @click.argument("error")
 @click.option("--project", "-p", default=None, help="Limit to a project.")
-@click.option("--top", "-n", default=5, help="Number of suggestions.")
+@click.option("--top", "-n", default=5, type=click.IntRange(min=1), help="Number of suggestions.")
 def debug_cmd(error: str, project: str | None, top: int):
     """Search memory for bugs, fixes, and patterns related to an error.
 

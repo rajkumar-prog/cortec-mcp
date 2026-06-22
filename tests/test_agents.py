@@ -107,6 +107,8 @@ class TestPrAssistant:
         v = _mock_vector([])
         result = pr_assistant.draft(db, v, project="proj")
         assert "Architecture" in result["template"]
+        assert len(result["architecture"]) == 1
+        assert result["architecture"][0]["summary"] == "Hexagonal architecture"
 
 
 # ── debug_assistant ───────────────────────────────────────────────────────────

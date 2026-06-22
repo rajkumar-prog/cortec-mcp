@@ -58,6 +58,7 @@ def draft(
         "decisions": _trim(decisions, 5),
         "fixes": _trim(fixes, 5),
         "bugs": _trim(bugs, 5),
+        "architecture": _trim(arch, 5),
         "relevant": relevant[:5],
         "total_memories": len(memories),
     }
