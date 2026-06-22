@@ -16,6 +16,7 @@ from .config import (
     RECALL_TOP_K,
     validate_type,
 )
+from .agents import pr_assistant, debug_assistant, portfolio as portfolio_agent
 from .conflicts import detect as detect_conflict
 from . import graph as graph_module
 from .github import fetch_commits, fetch_prs, fetch_issues
@@ -526,6 +527,55 @@ def link_memories(memory_id_a: str, memory_id_b: str) -> dict:
             "memory_id_b": memory_id_b,
         }
     return {"status": "error", "message": "Failed to link memories."}
+
+
+@mcp.tool()
+def draft_pr_summary(
+    project: str = DEFAULT_PROJECT,
+    context: str = "",
+    top_k: int = RECALL_TOP_K,
+) -> dict:
+    """
+    Draft a PR summary for a project using its stored memories.
+
+    Pulls recent decisions, fixes, bugs, and architecture memories, then
+    optionally runs a semantic search against `context` to surface the most
+    relevant entries. Returns a `template` field containing ready-to-paste
+    GitHub PR markdown.
+    """
+    if top_k < 1:
+        return {"status": "error", "reason": "top_k must be at least 1."}
+    return pr_assistant.draft(db, vector, project=project, context=context, top_k=top_k)
+
+
+@mcp.tool()
+def debug_suggest(
+    error: str,
+    project: str | None = None,
+    top_k: int = RECALL_TOP_K,
+) -> dict:
+    """
+    Suggest fixes for an error or symptom from stored memory.
+
+    Searches bug, fix, and Stack Overflow pattern memories semantically and
+    returns ranked suggestions with source citations. Pass the raw error
+    message or a short description of the symptom.
+    """
+    if top_k < 1:
+        return {"status": "error", "reason": "top_k must be at least 1."}
+    return debug_assistant.suggest(db, vector, error=error, project=project, top_k=top_k)
+
+
+@mcp.tool()
+def build_portfolio(project: str | None = None) -> dict:
+    """
+    Build a portfolio summary from portfolio and resume memories.
+
+    Aggregates all portfolio, resume, decision, and architecture memories for
+    a project (or all projects if project is None). Returns grouped lists and
+    a `markdown` field with a ready-to-export portfolio document.
+    """
+    return portfolio_agent.build(db, project=project)
 
 
 @mcp.tool()
