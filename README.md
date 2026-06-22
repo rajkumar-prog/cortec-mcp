@@ -91,6 +91,9 @@ Cortec exposes these tools to your coding environment:
 | `build_graph` | Build a knowledge graph for a project and return its summary |
 | `graph_neighbors` | Return memories connected to a given memory within N hops |
 | `link_memories` | Explicitly link two memories in the knowledge graph |
+| `draft_pr_summary` | Draft a PR description from project decisions, fixes, and bugs |
+| `debug_suggest` | Find related bugs, fixes, and patterns for an error message |
+| `build_portfolio` | Aggregate portfolio and resume memories into a Markdown export |
 | `forget` | Permanently delete a memory |
 
 ---
@@ -114,6 +117,10 @@ cortec so-search "async generator pattern"
 cortec graph-summary --project myapp
 cortec graph-neighbors <memory_id> --depth 2
 cortec graph-link <memory_id_a> <memory_id_b>
+cortec pr-draft --project myapp --context "refactor auth layer"
+cortec debug "TypeError: cannot unpack non-sequence NoneType"
+cortec portfolio --project myapp
+cortec portfolio --markdown
 ```
 
 ---
@@ -134,24 +141,18 @@ Every memory has a confidence score based on its source:
 
 ## Current Status
 
-**Phases 1–5 are complete.**
+**Phases 1–6 are complete.**
 
-- MCP server with 14 tools
+- MCP server with 17 tools
 - SQLite metadata store + Chroma vector search
 - Secret scanning (15 patterns), approval mode, conflict detection
 - GitHub integration — index commits, PRs, and issues; link memories to commit SHAs
 - Stack Overflow pattern store — fetch answers by URL, store and search locally
 - Knowledge graph — connect memories by explicit links, shared tags, and type; traverse with BFS
-- Full CLI with 18 commands
-- 78 tests passing
+- Agent workflows — PR draft, debug assist, and portfolio builder from memory
+- Full CLI with 21 commands
+- 100 tests passing
 - Local-first — no cloud, no telemetry, no external services
-
----
-
-## Roadmap
-
-**Phase 6 — Agent workflows**
-PR assistant, debugging assistant, and portfolio builder — all powered by your own memory.
 
 ---
 
@@ -217,6 +218,52 @@ Edges are weighted by connection strength:
 | 0.4 | Same memory type within the same project |
 
 The `build_graph`, `graph_neighbors`, and `link_memories` MCP tools expose the same capability from inside your coding environment.
+
+---
+
+## Agent Workflows
+
+Three memory-powered assistants that synthesize stored knowledge into actionable output — no LLM calls, everything runs locally.
+
+### PR Draft
+
+Pull the latest decisions, fixes, and bugs from memory and get a ready-to-paste PR description:
+
+```bash
+cortec pr-draft --project myapp
+cortec pr-draft --project myapp --context "refactor auth middleware"
+```
+
+Or call `draft_pr_summary(project, context)` from your MCP environment.
+
+### Debug Assist
+
+Give Cortec an error message and it searches your stored bugs, fixes, and Stack Overflow patterns for relevant suggestions:
+
+```bash
+cortec debug "TypeError: 'NoneType' object is not subscriptable"
+cortec debug "connection refused 5432" --project myapp
+```
+
+Results are ranked by semantic score and grouped by type (bug, fix, pattern). Call `debug_suggest(error, project)` from MCP.
+
+### Portfolio Builder
+
+Aggregate everything worth showcasing into a structured summary or Markdown export:
+
+```bash
+cortec portfolio --project myapp
+cortec portfolio --markdown > portfolio.md
+```
+
+Store portfolio items as you work:
+
+```bash
+cortec remember "Built semantic search over 10M tokens in < 200ms" --type portfolio
+cortec remember "Led migration from Django to FastAPI, 3x throughput gain" --type resume
+```
+
+Call `build_portfolio(project)` from MCP to get the same output programmatically.
 
 ---
 

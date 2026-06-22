@@ -13,6 +13,7 @@ from rich.table import Table
 from rich import box
 from rich.panel import Panel
 
+from .agents import pr_assistant, debug_assistant, portfolio as portfolio_agent
 from .config import CortecPaths, Confidence, DEFAULT_PROJECT, validate_type
 from . import graph as graph_module
 from .github import fetch_commits, fetch_prs, fetch_issues
@@ -648,3 +649,125 @@ def graph_link(memory_id_a: str, memory_id_b: str):
         )
     else:
         console.print("[red]Failed to link memories.[/]")
+
+
+@main.command("pr-draft")
+@click.option("--project", "-p", default=DEFAULT_PROJECT, help="Project name.")
+@click.option("--context", "-c", default="", help="Optional description of the change.")
+@click.option("--top", "-n", default=8, type=click.IntRange(min=1), help="Number of semantic results to surface.")
+def pr_draft(project: str, context: str, top: int):
+    """Draft a PR summary from project memory — decisions, fixes, and bugs.
+
+    \b
+    Example:
+      cortec pr-draft --project myapp
+      cortec pr-draft --project myapp --context "refactor auth middleware"
+    """
+    db = _db()
+    vector = _vector()
+    result = pr_assistant.draft(db, vector, project=project, context=context, top_k=top)
+
+    if result["total_memories"] == 0:
+        console.print(f"[yellow]No memories found for project:[/] {project}")
+        return
+
+    console.print(Panel(
+        result["template"],
+        title=f"PR Draft — {project}",
+        border_style="green",
+    ))
+
+    stats = (
+        f"decisions={len(result['decisions'])}  "
+        f"fixes={len(result['fixes'])}  "
+        f"bugs={len(result['bugs'])}  "
+        f"relevant={len(result['relevant'])}"
+    )
+    console.print(f"[dim]{stats}[/]")
+
+
+@main.command("debug")
+@click.argument("error")
+@click.option("--project", "-p", default=None, help="Limit to a project.")
+@click.option("--top", "-n", default=5, type=click.IntRange(min=1), help="Number of suggestions.")
+def debug_cmd(error: str, project: str | None, top: int):
+    """Search memory for bugs, fixes, and patterns related to an error.
+
+    \b
+    Example:
+      cortec debug "TypeError: cannot unpack non-sequence NoneType"
+      cortec debug "connection refused port 5432" --project myapp
+    """
+    db = _db()
+    vector = _vector()
+    result = debug_assistant.suggest(db, vector, error=error, project=project, top_k=top)
+
+    if result.get("message"):
+        console.print(f"[yellow]{result['message']}[/]")
+        return
+
+    if not result["suggestions"]:
+        console.print(f"[yellow]No matching memories found for:[/] {error}")
+        return
+
+    console.print(f"\n[bold]Debug suggestions for:[/] {error[:80]}\n")
+    for s in result["suggestions"]:
+        type_color = {"bug": "red", "fix": "green", "pattern": "cyan"}.get(s["type"], "white")
+        so_line = f"  [dim]{s['so_url']}[/]" if s.get("so_url") else ""
+        console.print(
+            Panel(
+                s["summary"][:300] + so_line,
+                title=f"[bold]{s['id']}[/]  [{type_color}]{s['type']}[/]  score={s['score']}",
+                subtitle=f"source={s['source']}  {s['created_at']}  confidence={s['confidence']}",
+                border_style=type_color,
+            )
+        )
+
+
+@main.command("portfolio")
+@click.option("--project", "-p", default=None, help="Project (omit for all).")
+@click.option("--markdown", "-m", is_flag=True, help="Print raw Markdown export.")
+def portfolio_cmd(project: str | None, markdown: bool):
+    """Build a portfolio summary from portfolio and resume memories.
+
+    \b
+    Example:
+      cortec portfolio
+      cortec portfolio --project myapp
+      cortec portfolio --project myapp --markdown
+    """
+    db = _db()
+    result = portfolio_agent.build(db, project=project)
+
+    if markdown:
+        console.print(result["markdown"])
+        return
+
+    label = project or "all projects"
+    console.print(Panel(
+        f"[bold]Portfolio items:[/]  {len(result['portfolio'])}\n"
+        f"[bold]Resume entries:[/]   {len(result['resume'])}\n"
+        f"[bold]Key decisions:[/]    {len(result['key_decisions'])}\n"
+        f"[bold]Architecture:[/]     {len(result['architecture'])}\n"
+        f"[bold]Total memories:[/]   {result['total_memories']}",
+        title=f"Portfolio — {label}",
+        border_style="magenta",
+    ))
+
+    if result["portfolio"]:
+        console.print("\n[bold]Highlights:[/]")
+        for item in result["portfolio"]:
+            console.print(f"  [cyan]{item['id']}[/]  {item['summary'][:80]}  [dim]{item['created_at']}[/]")
+
+    if result["resume"]:
+        console.print("\n[bold]Achievements:[/]")
+        for item in result["resume"]:
+            console.print(f"  [cyan]{item['id']}[/]  {item['summary'][:80]}  [dim]{item['created_at']}[/]")
+
+    if not result["portfolio"] and not result["resume"]:
+        console.print(
+            "\n[yellow]No portfolio or resume memories yet.[/]\n"
+            "Store them with:\n"
+            "  cortec remember '...' --type portfolio\n"
+            "  cortec remember '...' --type resume"
+        )
