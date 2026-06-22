@@ -14,6 +14,7 @@ from rich import box
 from rich.panel import Panel
 
 from .config import CortecPaths, Confidence, DEFAULT_PROJECT, validate_type
+from . import graph as graph_module
 from .github import fetch_commits, fetch_prs, fetch_issues
 from .stackoverflow import fetch_from_url, build_pattern_summary, canonical_url
 from .storage.db import MetadataStore
@@ -544,3 +545,106 @@ def so_search(query: str, project: str | None, top: int):
                 border_style="cyan",
             )
         )
+
+
+@main.command("graph-summary")
+@click.option("--project", "-p", default=DEFAULT_PROJECT, help="Project to graph.")
+def graph_summary(project: str):
+    """Show a knowledge graph summary for a project — nodes, edges, components."""
+    db = _db()
+    memories = db.list_all(project=project, approved_only=True)
+    if not memories:
+        console.print(f"[yellow]No memories found for project:[/] {project}")
+        return
+
+    G = graph_module.build(memories)
+    s = graph_module.summary(G)
+
+    console.print(Panel(
+        f"[bold]Nodes:[/]       {s['nodes']}\n"
+        f"[bold]Edges:[/]       {s['edges']}\n"
+        f"[bold]Components:[/]  {s['components']}\n"
+        f"[bold]Largest:[/]     {s.get('largest_component', 0)} memories\n"
+        f"[bold]Edge types:[/]  {s.get('edge_breakdown', {})}",
+        title=f"Knowledge Graph — {project}",
+        border_style="magenta",
+    ))
+
+    if s.get("most_connected"):
+        mc = s["most_connected"]
+        console.print(
+            f"\n[bold]Most connected:[/] [cyan]{mc['id']}[/] "
+            f"({mc['degree']} connections)\n  {mc['summary']}"
+        )
+
+
+@main.command("graph-neighbors")
+@click.argument("memory_id")
+@click.option("--depth", "-d", default=1, help="Hop depth (default 1).")
+def graph_neighbors(memory_id: str, depth: int):
+    """Show memories connected to a given memory in the knowledge graph.
+
+    \b
+    Example:
+      cortec graph-neighbors a1b2c3d4
+      cortec graph-neighbors a1b2c3d4 --depth 2
+    """
+    db = _db()
+    meta = db.get(memory_id)
+    if not meta:
+        console.print(f"[red]Memory {memory_id} not found.[/]")
+        return
+
+    project = meta.get("project", DEFAULT_PROJECT)
+    memories = db.list_all(project=project, approved_only=True)
+    G = graph_module.build(memories)
+    nbs = graph_module.neighbors(G, memory_id, depth=depth)
+
+    if not nbs:
+        console.print(f"[yellow]No neighbors found for[/] [bold]{memory_id}[/]")
+        return
+
+    console.print(f"\n[bold]Neighbors of[/] [cyan]{memory_id}[/] (depth={depth}):\n")
+    table = Table(box=box.SIMPLE, show_header=True)
+    table.add_column("ID", style="bold cyan")
+    table.add_column("Type")
+    table.add_column("Connection")
+    table.add_column("Weight", justify="right")
+    table.add_column("Summary")
+
+    for nb in nbs:
+        table.add_row(
+            nb["id"],
+            nb.get("type", ""),
+            nb.get("connection", ""),
+            str(nb.get("weight", "")),
+            nb.get("summary", "")[:60],
+        )
+    console.print(table)
+
+
+@main.command("graph-link")
+@click.argument("memory_id_a")
+@click.argument("memory_id_b")
+def graph_link(memory_id_a: str, memory_id_b: str):
+    """Explicitly link two memories in the knowledge graph.
+
+    \b
+    Example:
+      cortec graph-link a1b2c3d4 e5f6g7h8
+    """
+    db = _db()
+    if not db.get(memory_id_a):
+        console.print(f"[red]Memory {memory_id_a} not found.[/]")
+        return
+    if not db.get(memory_id_b):
+        console.print(f"[red]Memory {memory_id_b} not found.[/]")
+        return
+
+    linked = db.link_memories(memory_id_a, memory_id_b)
+    if linked:
+        console.print(
+            f"[green]✓[/] Linked [bold]{memory_id_a}[/] ↔ [bold]{memory_id_b}[/]"
+        )
+    else:
+        console.print("[red]Failed to link memories.[/]")

@@ -17,6 +17,7 @@ from .config import (
     validate_type,
 )
 from .conflicts import detect as detect_conflict
+from . import graph as graph_module
 from .github import fetch_commits, fetch_prs, fetch_issues
 from .ingest import archive_session, summarize
 from .stackoverflow import fetch_from_url, build_pattern_summary, canonical_url
@@ -452,6 +453,79 @@ def recall_patterns(
         })
 
     return {"query": query, "results": results, "count": len(results)}
+
+
+@mcp.tool()
+def build_graph(project: str = DEFAULT_PROJECT) -> dict:
+    """
+    Build a knowledge graph of all memories in a project.
+
+    Returns a summary of the graph structure — node count, edge count,
+    connected components, and the most-connected memory.
+    Edges are drawn from explicit links, shared tags, and shared type.
+    """
+    memories = db.list_all(project=project, approved_only=True)
+    if not memories:
+        return {
+            "project": project,
+            "nodes": 0,
+            "edges": 0,
+            "components": 0,
+            "largest_component": 0,
+            "most_connected": None,
+            "edge_breakdown": {},
+            "message": "No memories found.",
+        }
+
+    G = graph_module.build(memories)
+    result = graph_module.summary(G)
+    result["project"] = project
+    return result
+
+
+@mcp.tool()
+def graph_neighbors(memory_id: str, depth: int = 1) -> dict:
+    """
+    Return memories connected to the given memory within `depth` hops.
+
+    Builds the full graph for the memory's project, then traverses up to
+    `depth` hops from the starting node. Each result includes the connection
+    reason (explicit, shared_tag, same_type) and edge weight.
+    """
+    meta = db.get(memory_id)
+    if not meta:
+        return {"status": "not_found", "memory_id": memory_id}
+
+    project = meta.get("project", DEFAULT_PROJECT)
+    memories = db.list_all(project=project, approved_only=True)
+    G = graph_module.build(memories)
+    nbs = graph_module.neighbors(G, memory_id, depth=depth)
+
+    return {
+        "memory_id": memory_id,
+        "summary": meta.get("summary", "")[:100],
+        "depth": depth,
+        "neighbors": nbs,
+        "count": len(nbs),
+    }
+
+
+@mcp.tool()
+def link_memories(memory_id_a: str, memory_id_b: str) -> dict:
+    """Explicitly link two memories so they appear as related in the knowledge graph."""
+    if not db.get(memory_id_a):
+        return {"status": "not_found", "memory_id": memory_id_a}
+    if not db.get(memory_id_b):
+        return {"status": "not_found", "memory_id": memory_id_b}
+
+    linked = db.link_memories(memory_id_a, memory_id_b)
+    if linked:
+        return {
+            "status": "linked",
+            "memory_id_a": memory_id_a,
+            "memory_id_b": memory_id_b,
+        }
+    return {"status": "error", "message": "Failed to link memories."}
 
 
 @mcp.tool()

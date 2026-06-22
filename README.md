@@ -88,6 +88,9 @@ Cortec exposes these tools to your coding environment:
 | `commits_for_memory` | Find all memories linked to the same commit |
 | `store_so_pattern` | Fetch a Stack Overflow answer and store it as a pattern |
 | `recall_patterns` | Semantic search over stored Stack Overflow patterns |
+| `build_graph` | Build a knowledge graph for a project and return its summary |
+| `graph_neighbors` | Return memories connected to a given memory within N hops |
+| `link_memories` | Explicitly link two memories in the knowledge graph |
 | `forget` | Permanently delete a memory |
 
 ---
@@ -108,6 +111,9 @@ cortec github-index owner/repo --project myapp
 cortec github-link <memory_id> <commit_sha>
 cortec so-store https://stackoverflow.com/a/11227902
 cortec so-search "async generator pattern"
+cortec graph-summary --project myapp
+cortec graph-neighbors <memory_id> --depth 2
+cortec graph-link <memory_id_a> <memory_id_b>
 ```
 
 ---
@@ -128,26 +134,21 @@ Every memory has a confidence score based on its source:
 
 ## Current Status
 
-**Phases 1, 2, 3, and 4 are complete.**
+**Phases 1–5 are complete.**
 
-- MCP server with 11 tools
+- MCP server with 14 tools
 - SQLite metadata store + Chroma vector search
 - Secret scanning (15 patterns), approval mode, conflict detection
 - GitHub integration — index commits, PRs, and issues; link memories to commit SHAs
 - Stack Overflow pattern store — fetch answers by URL, store and search locally
-- Full CLI with 15 commands
-- 53 tests passing
+- Knowledge graph — connect memories by explicit links, shared tags, and type; traverse with BFS
+- Full CLI with 18 commands
+- 78 tests passing
 - Local-first — no cloud, no telemetry, no external services
 
 ---
 
 ## Roadmap
-
-**Phase 4 — Stack Overflow pattern store**
-When a Stack Overflow answer helps you fix something, store the pattern locally so you never have to search for it again.
-
-**Phase 5 — Knowledge graph**
-Connect memories across projects — bugs, fixes, files, decisions — into a navigable graph. Ask "what else is related to this?" and get real answers.
 
 **Phase 6 — Agent workflows**
 PR assistant, debugging assistant, and portfolio builder — all powered by your own memory.
@@ -189,6 +190,33 @@ cortec so-search "close file descriptor python"
 ```
 
 Or use the MCP tools directly — `store_so_pattern` and `recall_patterns` — from inside your coding environment.
+
+---
+
+## Knowledge Graph
+
+Memories are connected automatically based on shared tags, memory type, and explicit links. Traverse that graph to discover what else is related to any memory.
+
+```bash
+# See the shape of a project's memory graph
+cortec graph-summary --project myapp
+
+# Find what's connected to a specific memory (up to 2 hops away)
+cortec graph-neighbors a1b2c3d4 --depth 2
+
+# Manually link two memories you know are related
+cortec graph-link a1b2c3d4 e5f6g7h8
+```
+
+Edges are weighted by connection strength:
+
+| Weight | Reason |
+|---|---|
+| 1.0 | Explicit link (`graph-link` or `link_memories`) |
+| 0.7 | Shared tag |
+| 0.4 | Same memory type within the same project |
+
+The `build_graph`, `graph_neighbors`, and `link_memories` MCP tools expose the same capability from inside your coding environment.
 
 ---
 
