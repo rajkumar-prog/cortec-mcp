@@ -114,24 +114,39 @@ class MetadataStore:
         return memory_id
 
     def link_memories(self, memory_id_a: str, memory_id_b: str) -> bool:
-        """Bidirectionally link two memories so each appears in the other's related_to list."""
-        def _add_link(src: str, dst: str) -> bool:
-            row = self.get(src)
-            if not row:
-                return False
-            current = json.loads(row.get("related_to") or "[]")
-            if dst not in current:
-                current.append(dst)
-            with self._conn() as conn:
-                conn.execute(
-                    "UPDATE memories SET related_to = ? WHERE id = ?",
-                    (json.dumps(current), src),
-                )
-            return True
+        """Bidirectionally link two memories so each appears in the other's related_to list.
 
-        ok_a = _add_link(memory_id_a, memory_id_b)
-        ok_b = _add_link(memory_id_b, memory_id_a)
-        return ok_a and ok_b
+        Both updates execute in a single transaction — either both succeed or both are
+        rolled back, preventing asymmetric or half-written relationships.
+        """
+        with self._conn() as conn:
+            row_a = conn.execute(
+                "SELECT related_to FROM memories WHERE id = ?", (memory_id_a,)
+            ).fetchone()
+            row_b = conn.execute(
+                "SELECT related_to FROM memories WHERE id = ?", (memory_id_b,)
+            ).fetchone()
+
+            if not row_a or not row_b:
+                return False
+
+            list_a = json.loads(row_a["related_to"] or "[]")
+            list_b = json.loads(row_b["related_to"] or "[]")
+
+            if memory_id_b not in list_a:
+                list_a.append(memory_id_b)
+            if memory_id_a not in list_b:
+                list_b.append(memory_id_a)
+
+            conn.execute(
+                "UPDATE memories SET related_to = ? WHERE id = ?",
+                (json.dumps(list_a), memory_id_a),
+            )
+            conn.execute(
+                "UPDATE memories SET related_to = ? WHERE id = ?",
+                (json.dumps(list_b), memory_id_b),
+            )
+        return True
 
     def get_related(self, memory_id: str) -> list[dict]:
         """Return all memories explicitly linked to the given memory ID."""

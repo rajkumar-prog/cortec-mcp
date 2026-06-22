@@ -466,7 +466,16 @@ def build_graph(project: str = DEFAULT_PROJECT) -> dict:
     """
     memories = db.list_all(project=project, approved_only=True)
     if not memories:
-        return {"project": project, "nodes": 0, "edges": 0, "message": "No memories found."}
+        return {
+            "project": project,
+            "nodes": 0,
+            "edges": 0,
+            "components": 0,
+            "largest_component": 0,
+            "most_connected": None,
+            "edge_breakdown": {},
+            "message": "No memories found.",
+        }
 
     G = graph_module.build(memories)
     result = graph_module.summary(G)

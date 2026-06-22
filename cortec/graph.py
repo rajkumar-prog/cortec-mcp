@@ -9,6 +9,15 @@ from typing import Any
 import networkx as nx
 
 
+def _parse_json_list(value: str | None) -> list:
+    """Parse a JSON list string, returning an empty list on any error."""
+    try:
+        result = json.loads(value or "[]")
+        return result if isinstance(result, list) else []
+    except (json.JSONDecodeError, TypeError):
+        return []
+
+
 def build(memories: list[dict]) -> nx.Graph:
     """
     Build an undirected graph from a list of memory dicts.
@@ -29,20 +38,20 @@ def build(memories: list[dict]) -> nx.Graph:
             project=m.get("project", "default"),
             source=m.get("source", ""),
             confidence=m.get("confidence", 0.5),
-            tags=json.loads(m.get("tags") or "[]"),
+            tags=_parse_json_list(m.get("tags")),
             created_at=m.get("created_at", "")[:10],
         )
 
     # Explicit links
     for m in memories:
-        for related_id in json.loads(m.get("related_to") or "[]"):
+        for related_id in _parse_json_list(m.get("related_to")):
             if G.has_node(related_id):
                 G.add_edge(m["id"], related_id, weight=1.0, reason="explicit")
 
     # Shared tags
     tag_index: dict[str, list[str]] = {}
     for m in memories:
-        for tag in json.loads(m.get("tags") or "[]"):
+        for tag in _parse_json_list(m.get("tags")):
             tag_index.setdefault(tag, []).append(m["id"])
 
     for tag, ids in tag_index.items():
@@ -85,6 +94,8 @@ def neighbors(G: nx.Graph, memory_id: str, depth: int = 1) -> list[dict[str, Any
             for nb in G.neighbors(node):
                 if nb != memory_id and nb not in visited:
                     next_level.add(nb)
+        if not next_level:
+            break
         visited.update(next_level)
         current_level = next_level
 
@@ -103,7 +114,14 @@ def neighbors(G: nx.Graph, memory_id: str, depth: int = 1) -> list[dict[str, Any
 def summary(G: nx.Graph) -> dict[str, Any]:
     """Return a high-level summary of the graph's structure."""
     if G.number_of_nodes() == 0:
-        return {"nodes": 0, "edges": 0, "components": 0, "most_connected": None}
+        return {
+            "nodes": 0,
+            "edges": 0,
+            "components": 0,
+            "largest_component": 0,
+            "most_connected": None,
+            "edge_breakdown": {},
+        }
 
     components = list(nx.connected_components(G))
     degrees = sorted(G.degree(), key=lambda x: -x[1])
