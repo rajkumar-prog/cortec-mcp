@@ -14,9 +14,11 @@ from .config import (
     DEFAULT_APPROVAL_MODE,
     DEFAULT_PROJECT,
     RECALL_TOP_K,
+    STALE_THRESHOLD,
     validate_type,
 )
 from .agents import pr_assistant, debug_assistant, portfolio as portfolio_agent
+from . import decay
 from .conflicts import detect as detect_conflict
 from . import graph as graph_module
 from .github import fetch_commits, fetch_prs, fetch_issues
@@ -150,10 +152,15 @@ def recall(
         meta = db.get(hit["id"])
         if not meta:
             continue
+        eff = decay.effective_confidence(
+            meta.get("confidence", 0.5), meta.get("created_at"), meta.get("type", "general")
+        )
         results.append({
             "id": hit["id"],
             "summary": hit["document"],
             "score": hit["score"],
+            "effective_confidence": eff,
+            "stale": eff < STALE_THRESHOLD,
             "citation": {
                 "source": meta.get("source"),
                 "project": meta.get("project"),
@@ -576,6 +583,44 @@ def build_portfolio(project: str | None = None) -> dict:
     a `markdown` field with a ready-to-export portfolio document.
     """
     return portfolio_agent.build(db, project=project)
+
+
+@mcp.tool()
+def stale_memories(
+    project: str | None = None,
+    threshold: float = STALE_THRESHOLD,
+) -> dict:
+    """
+    List memories whose confidence has decayed below a threshold.
+
+    Confidence decays from its stored value toward a floor as a memory ages,
+    with a per-type half-life (timeless decisions decay slowly, volatile bugs
+    fast). Returns stale memories sorted by effective confidence ascending —
+    the most decayed first — so you can review or forget them.
+    """
+    memories = db.list_all(project=project, approved_only=True)
+    stale = []
+    for m in memories:
+        annotated = decay.annotate(m)
+        if annotated["effective_confidence"] < threshold:
+            stale.append({
+                "id": m["id"],
+                "summary": m["summary"][:100],
+                "type": m.get("type"),
+                "confidence": m.get("confidence"),
+                "effective_confidence": annotated["effective_confidence"],
+                "age_days": annotated["age_days"],
+                "created_at": m.get("created_at", "")[:10],
+            })
+
+    stale.sort(key=lambda x: x["effective_confidence"])
+    return {
+        "project": project or "all",
+        "threshold": threshold,
+        "stale_count": len(stale),
+        "total_checked": len(memories),
+        "memories": stale,
+    }
 
 
 @mcp.tool()

@@ -14,7 +14,8 @@ from rich import box
 from rich.panel import Panel
 
 from .agents import pr_assistant, debug_assistant, portfolio as portfolio_agent
-from .config import CortecPaths, Confidence, DEFAULT_PROJECT, validate_type
+from .config import CortecPaths, Confidence, DEFAULT_PROJECT, STALE_THRESHOLD, validate_type
+from . import decay
 from . import graph as graph_module
 from .github import fetch_commits, fetch_prs, fetch_issues
 from .stackoverflow import fetch_from_url, build_pattern_summary, canonical_url
@@ -135,12 +136,17 @@ def recall(query, project, type, top):
         meta = db.get(hit["id"])
         if not meta:
             continue
+        eff = decay.effective_confidence(
+            meta.get("confidence", 0.5), meta.get("created_at"), meta.get("type", "general")
+        )
+        stale = eff < STALE_THRESHOLD
+        stale_tag = "  [yellow]⚠ stale[/]" if stale else ""
         console.print(
             Panel(
                 hit["document"],
-                title=f"[bold]{hit['id']}[/]  score={hit['score']}  confidence={meta['confidence']}",
+                title=f"[bold]{hit['id']}[/]  score={hit['score']}  confidence={meta['confidence']}→{eff}{stale_tag}",
                 subtitle=f"source={meta['source']}  project={meta['project']}  {meta['created_at'][:10]}",
-                border_style="cyan",
+                border_style="yellow" if stale else "cyan",
             )
         )
 
@@ -771,3 +777,71 @@ def portfolio_cmd(project: str | None, markdown: bool):
             "  cortec remember '...' --type portfolio\n"
             "  cortec remember '...' --type resume"
         )
+
+
+@main.command("stale")
+@click.option("--project", "-p", default=None, help="Limit to a project.")
+@click.option(
+    "--threshold", "-t", default=STALE_THRESHOLD, type=click.FloatRange(0.0, 1.0),
+    help=f"Effective-confidence cutoff (default {STALE_THRESHOLD}).",
+)
+def stale(project: str | None, threshold: float):
+    """Show memories whose confidence has decayed below a threshold.
+
+    \b
+    Confidence ages from its stored value toward a floor over time, with a
+    per-type half-life — timeless decisions decay slowly, volatile bugs fast.
+
+    \b
+    Example:
+      cortec stale
+      cortec stale --project myapp --threshold 0.5
+    """
+    db = _db()
+    memories = db.list_all(project=project, approved_only=True)
+    if not memories:
+        console.print(f"[yellow]No memories found{f' for {project}' if project else ''}.[/]")
+        return
+
+    rows = []
+    for m in memories:
+        annotated = decay.annotate(m)
+        if annotated["effective_confidence"] < threshold:
+            rows.append(annotated)
+
+    rows.sort(key=lambda x: x["effective_confidence"])
+
+    if not rows:
+        console.print(
+            f"[green]✓[/] No stale memories below {threshold}. "
+            f"Checked {len(memories)} memor{'y' if len(memories) == 1 else 'ies'}."
+        )
+        return
+
+    console.print(
+        f"\n[bold]{len(rows)} stale memor{'y' if len(rows) == 1 else 'ies'}[/] "
+        f"(effective confidence < {threshold}):\n"
+    )
+    table = Table(box=box.SIMPLE, show_header=True)
+    table.add_column("ID", style="bold cyan")
+    table.add_column("Type")
+    table.add_column("Stored", justify="right")
+    table.add_column("Now", justify="right")
+    table.add_column("Age (d)", justify="right")
+    table.add_column("Summary")
+
+    for r in rows:
+        table.add_row(
+            r["id"],
+            r.get("type", ""),
+            str(r.get("confidence", "")),
+            f"[yellow]{r['effective_confidence']}[/]",
+            str(int(r["age_days"])),
+            r.get("summary", "")[:50],
+        )
+    console.print(table)
+    console.print(
+        f"\n[dim]Review and prune with:[/] cortec forget <id>"
+    )
+
+
