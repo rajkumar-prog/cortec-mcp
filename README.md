@@ -94,6 +94,7 @@ Cortec exposes these tools to your coding environment:
 | `draft_pr_summary` | Draft a PR description from project decisions, fixes, and bugs |
 | `debug_suggest` | Find related bugs, fixes, and patterns for an error message |
 | `build_portfolio` | Aggregate portfolio and resume memories into a Markdown export |
+| `stale_memories` | List memories whose confidence has decayed below a threshold |
 | `forget` | Permanently delete a memory |
 
 ---
@@ -121,13 +122,14 @@ cortec pr-draft --project myapp --context "refactor auth layer"
 cortec debug "TypeError: cannot unpack non-sequence NoneType"
 cortec portfolio --project myapp
 cortec portfolio --markdown
+cortec stale --project myapp --threshold 0.4
 ```
 
 ---
 
 ## Confidence Scale
 
-Every memory has a confidence score based on its source:
+Every memory starts with a confidence score based on its source:
 
 | Score | Source |
 |---|---|
@@ -137,21 +139,24 @@ Every memory has a confidence score based on its source:
 | 0.6 | Stack Overflow pattern |
 | 0.5 | Inferred |
 
+That starting score then [decays with age](#memory-decay) — `recall` reports the effective confidence after decay, not just the original.
+
 ---
 
 ## Current Status
 
-**Phases 1–6 are complete.**
+**Phases 1–7 are complete.**
 
-- MCP server with 17 tools
+- MCP server with 18 tools
 - SQLite metadata store + Chroma vector search
 - Secret scanning (15 patterns), approval mode, conflict detection
 - GitHub integration — index commits, PRs, and issues; link memories to commit SHAs
 - Stack Overflow pattern store — fetch answers by URL, store and search locally
 - Knowledge graph — connect memories by explicit links, shared tags, and type; traverse with BFS
 - Agent workflows — PR draft, debug assist, and portfolio builder from memory
-- Full CLI with 21 commands
-- 100 tests passing
+- Memory decay — confidence ages toward a floor with per-type half-lives; stale memories surface in recall
+- Full CLI with 22 commands
+- 127 tests passing
 - Local-first — no cloud, no telemetry, no external services
 
 ---
@@ -264,6 +269,37 @@ cortec remember "Led migration from Django to FastAPI, 3x throughput gain" --typ
 ```
 
 Call `build_portfolio(project)` from MCP to get the same output programmatically.
+
+---
+
+## Memory Decay
+
+Old context shouldn't be trusted as much as fresh context. Cortec ages each memory's confidence toward a floor over time, so a decision you made 18 months ago no longer outranks one from last week.
+
+Decay is computed at read time — the stored confidence is never overwritten. It's treated as immutable provenance, and decay is a lens applied on top:
+
+```
+effective = floor + (base − floor) × 0.5 ^ (age_days / half_life)
+```
+
+Each memory type has its own half-life, so timeless context decays slowly and volatile context decays fast:
+
+| Half-life | Types |
+|---|---|
+| 365 days | `architecture`, `resume`, `portfolio` |
+| 270 days | `decision`, `preference` |
+| 120 days | `dependency`, `command`, `general` |
+| 90 days | `pattern`, `fix` |
+| 60 days | `bug` |
+
+`recall` reports the decayed value (`confidence=0.8→0.52`) and flags anything below the stale threshold. To review what's gone stale and prune it:
+
+```bash
+cortec stale --project myapp
+cortec stale --threshold 0.5
+```
+
+Or call `stale_memories(project, threshold)` from MCP.
 
 ---
 
