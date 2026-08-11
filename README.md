@@ -278,7 +278,7 @@ Old context shouldn't be trusted as much as fresh context. Cortec ages each memo
 
 Decay is computed at read time — the stored confidence is never overwritten. It's treated as immutable provenance, and decay is a lens applied on top:
 
-```
+```text
 effective = floor + (base − floor) × 0.5 ^ (age_days / half_life)
 ```
 

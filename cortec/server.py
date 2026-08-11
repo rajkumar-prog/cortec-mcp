@@ -450,12 +450,17 @@ def recall_patterns(
         meta = db.get(hit["id"])
         if not meta:
             continue
+        eff = decay.effective_confidence(
+            meta.get("confidence", 0.5), meta.get("created_at"), meta.get("type", "pattern")
+        )
         results.append({
             "id": hit["id"],
             "summary": hit["document"],
             "score": hit["score"],
             "so_url": meta.get("so_url"),
             "confidence": meta.get("confidence"),
+            "effective_confidence": eff,
+            "stale": eff < STALE_THRESHOLD,
             "project": meta.get("project"),
             "created_at": meta.get("created_at", "")[:10],
         })
@@ -598,6 +603,9 @@ def stale_memories(
     fast). Returns stale memories sorted by effective confidence ascending —
     the most decayed first — so you can review or forget them.
     """
+    if not 0.0 <= threshold <= 1.0:
+        return {"status": "error", "reason": "threshold must be between 0.0 and 1.0."}
+
     memories = db.list_all(project=project, approved_only=True)
     stale = []
     for m in memories:

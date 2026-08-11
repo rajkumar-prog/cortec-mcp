@@ -841,7 +841,7 @@ def stale(project: str | None, threshold: float):
         )
     console.print(table)
     console.print(
-        f"\n[dim]Review and prune with:[/] cortec forget <id>"
+        "\n[dim]Review and prune with:[/] cortec forget <id>"
     )
 
 
