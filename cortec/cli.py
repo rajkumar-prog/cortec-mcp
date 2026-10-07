@@ -980,6 +980,8 @@ def browse(project: str | None, type_: str | None, page_size: int):
                 db.delete(arg)
                 vector.delete(arg)
                 memories = [m for m in memories if m["id"] != arg]
+                # Deletion may have emptied the current page — keep page index valid.
+                state = browse_module.clamp_page(state, memories, page_size)
                 message = f"[green]✓ deleted {arg}[/]"
                 if not memories:
                     console.print("[yellow]No memories left.[/]")

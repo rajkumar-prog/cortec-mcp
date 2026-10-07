@@ -118,3 +118,22 @@ def visible(
     filtered = apply_filters(memories, state.project, state.type, state.query)
     page_items, total_pages, page = paginate(filtered, state.page, page_size)
     return page_items, total_pages, page, len(filtered)
+
+
+def clamp_page(
+    state: BrowseState,
+    memories: list[dict],
+    page_size: int = DEFAULT_PAGE_SIZE,
+) -> BrowseState:
+    """
+    Return a state whose page is clamped to the valid range for the current memories.
+
+    Used after a deletion shrinks the collection so the stored page index can't
+    point past the last page (which would leave navigation stuck).
+    """
+    _, _, page = paginate(
+        apply_filters(memories, state.project, state.type, state.query),
+        state.page,
+        page_size,
+    )
+    return replace(state, page=page)

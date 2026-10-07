@@ -204,3 +204,37 @@ def test_visible_second_page():
     page_items, total_pages, page, total = browse.visible(state, mems, page_size=10)
     assert len(page_items) == 2
     assert page == 1
+
+
+# ── clamp_page (post-deletion safety) ────────────────────────────────────────
+
+def test_clamp_page_pulls_back_after_shrink():
+    # 12 items over 2 pages (size 10); on page 2, then collection shrinks to 10
+    state = BrowseState(page=1)
+    shrunk = _many(10)  # now only 1 page
+    clamped = browse.clamp_page(state, shrunk, page_size=10)
+    assert clamped.page == 0
+
+
+def test_clamp_page_keeps_valid_page():
+    state = BrowseState(page=1)
+    mems = _many(25)  # 3 pages, page 1 still valid
+    assert browse.clamp_page(state, mems, page_size=10).page == 1
+
+
+def test_clamp_page_empty_collection():
+    state = BrowseState(page=3)
+    assert browse.clamp_page(state, [], page_size=10).page == 0
+
+
+def test_clamp_page_respects_filters():
+    # page 1 valid only if filtered set is large enough
+    mems = _many(5, type_="bug") + _many(20, type_="fix")
+    state = BrowseState(type="bug", page=1)  # only 5 bugs → 1 page
+    assert browse.clamp_page(state, mems, page_size=10).page == 0
+
+
+def test_clamp_page_is_pure():
+    state = BrowseState(page=5)
+    browse.clamp_page(state, _many(3), page_size=10)
+    assert state.page == 5  # original frozen state untouched
