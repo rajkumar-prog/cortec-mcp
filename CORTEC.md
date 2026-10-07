@@ -2,8 +2,8 @@
 
 project: cortec-mcp
 author: Raj Kumar Satya
-version: 0.1.0
-phase: 1
+version: 0.2.0
+phase: 7
 
 ## Stack
 - MCP server: FastMCP
