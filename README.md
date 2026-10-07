@@ -153,6 +153,7 @@ cortec debug "TypeError: cannot unpack non-sequence NoneType"
 cortec portfolio --project myapp
 cortec portfolio --markdown
 cortec stale --project myapp --threshold 0.4
+cortec browse
 ```
 
 ---
@@ -186,8 +187,9 @@ That starting score then [decays with age](#memory-decay) — `recall` reports t
 - Agent workflows — PR draft, debug assist, and portfolio builder from memory
 - Memory decay — confidence ages toward a floor with per-type half-lives; stale memories surface in recall
 - Runs as an MCP server over stdio (`cortec serve`); session summarization via a local LLM or extractive fallback
-- Full CLI with 23 commands
-- 127 tests passing, CI across Python 3.10–3.12
+- Interactive terminal browser (`cortec browse`) — page, filter, search, inspect, and prune memories
+- Full CLI with 24 commands
+- 166 tests passing, CI across Python 3.10–3.12
 - Local-first — no cloud, no telemetry, no external services
 
 ---
@@ -358,6 +360,33 @@ summarize_session(
 ```
 
 If the LLM is unreachable, Cortec falls back to extractive summarization automatically — the call never fails on a missing model.
+
+---
+
+## Interactive Browser
+
+`cortec browse` opens a paged terminal view of your memory store — no flags to memorize. Filter, search, inspect, and prune in place:
+
+```bash
+cortec browse
+cortec browse --project myapp --type bug
+```
+
+Inside the browser, type short commands:
+
+| Command | Action |
+|---|---|
+| `n` / `p` | Next / previous page |
+| `page N` | Jump to page N |
+| `type <type>` | Filter by memory type (e.g. `type bug`) |
+| `project <name>` | Filter by project |
+| `search <text>` | Full-text search over summaries |
+| `clear` | Clear all filters |
+| `open <id>` | Show a memory's full detail |
+| `forget <id>` | Delete a memory (with confirmation) |
+| `h` | Help · `q` Quit |
+
+Stale memories (decayed below the threshold) are highlighted, and each row shows effective confidence and age at a glance.
 
 ---
 
