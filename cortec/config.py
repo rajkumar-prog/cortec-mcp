@@ -87,6 +87,33 @@ class CortecPaths:
             d.mkdir(parents=True, exist_ok=True)
 
 
+# ── Confidence decay (age-based) ──────────────────────────────────────────────
+#
+# Confidence decays toward a floor as a memory ages. Decay is computed at read
+# time from the stored confidence and created_at — the stored value is never
+# mutated. Each type has its own half-life: timeless decisions decay slowly,
+# volatile bugs and commands decay fast.
+
+DECAY_FLOOR        = 0.1   # effective confidence never drops below this
+STALE_THRESHOLD    = 0.4   # below this effective confidence, a memory is "stale"
+DEFAULT_HALF_LIFE  = 120   # days; used for any type without an explicit entry
+
+# Half-life in days, per memory type — how long until decay halves the gap to floor
+DECAY_HALF_LIFE_DAYS: dict[str, int] = {
+    "architecture": 365,   # structural decisions rarely go stale
+    "resume":       365,   # achievements don't expire
+    "portfolio":    365,
+    "decision":     270,
+    "preference":   270,
+    "dependency":   120,   # libraries get updated
+    "command":      120,
+    "general":      120,
+    "pattern":       90,   # external patterns churn with library versions
+    "fix":           90,   # code moves on
+    "bug":           60,   # bugs get fixed and become irrelevant
+}
+
+
 # ── Defaults ──────────────────────────────────────────────────────────────────
 
 DEFAULT_APPROVAL_MODE  = ApprovalMode.APPROVAL_REQUIRED
