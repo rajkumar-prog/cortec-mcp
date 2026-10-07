@@ -1,5 +1,10 @@
 # Cortec
 
+[![PyPI version](https://img.shields.io/pypi/v/cortec-mcp.svg)](https://pypi.org/project/cortec-mcp/)
+[![Python versions](https://img.shields.io/pypi/pyversions/cortec-mcp.svg)](https://pypi.org/project/cortec-mcp/)
+[![Tests](https://github.com/rajkumar-prog/cortec-mcp/actions/workflows/tests.yml/badge.svg)](https://github.com/rajkumar-prog/cortec-mcp/actions/workflows/tests.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 **Local-first memory server for developer workflows.**
 
 Cortec runs as an MCP server inside your coding environment. It remembers your project decisions, bugs, fixes, and session context and retrieves exactly the right memory when you need it. Everything stays on your machine.

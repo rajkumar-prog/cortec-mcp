@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "cortec-mcp"
-version = "0.2.0"
+version = "0.2.1"
 description = "Local-first memory server for developer workflows"
 authors = [{ name = "Raj Kumar Satya", email = "satyarajkumar411@gmail.com" }]
 license = { text = "MIT" }
