@@ -4,6 +4,15 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-10-07
+
+### Added
+- **`cortec browse`** — an interactive terminal browser for the memory store.
+  Page through memories and filter by project or type, full-text search summaries,
+  open a memory for full detail, and forget one in place. Stale memories are
+  highlighted with their effective confidence and age. Filter, paginate, and
+  command-parsing logic live in `cortec/browse.py` and are fully unit-tested.
+
 ## [0.2.1] - 2026-10-07
 
 ### Changed
@@ -42,6 +51,7 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Agent workflows — PR draft, debug assist, and portfolio builder from memory.
 - Full CLI and 17 MCP tools.
 
+[0.3.0]: https://github.com/rajkumar-prog/cortec-mcp/releases/tag/v0.3.0
 [0.2.1]: https://github.com/rajkumar-prog/cortec-mcp/releases/tag/v0.2.1
 [0.2.0]: https://github.com/rajkumar-prog/cortec-mcp/releases/tag/v0.2.0
 [0.1.0]: https://github.com/rajkumar-prog/cortec-mcp/releases/tag/v0.1.0

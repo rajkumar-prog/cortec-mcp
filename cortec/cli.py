@@ -15,6 +15,7 @@ from rich.panel import Panel
 
 from .agents import pr_assistant, debug_assistant, portfolio as portfolio_agent
 from .config import CortecPaths, Confidence, DEFAULT_PROJECT, STALE_THRESHOLD, validate_type
+from . import browse as browse_module
 from . import decay
 from . import graph as graph_module
 from .github import fetch_commits, fetch_prs, fetch_issues
@@ -856,5 +857,138 @@ def serve():
     # Imported lazily so ordinary CLI commands don't pay server startup cost.
     from .server import serve as _serve
     _serve()
+
+
+_BROWSE_HELP = (
+    "[bold]Commands:[/]  "
+    "[cyan]n[/]ext · [cyan]p[/]rev · [cyan]page N[/] · "
+    "[cyan]t[/]ype <type> · [cyan]project <name>[/] · [cyan]s[/]earch <text> · "
+    "[cyan]clear[/] · [cyan]o[/]pen <id> · [cyan]f[/]orget <id> · [cyan]h[/]elp · [cyan]q[/]uit"
+)
+
+
+def _render_browse(state, memories, page_size, message):
+    """Draw the current browse page: filter bar, table, and status line."""
+    page_items, total_pages, cpage, total = browse_module.visible(state, memories, page_size)
+
+    filters = []
+    if state.project:
+        filters.append(f"project=[bold]{state.project}[/]")
+    if state.type:
+        filters.append(f"type=[bold]{state.type}[/]")
+    if state.query:
+        filters.append(f"search=[bold]{state.query}[/]")
+    filter_line = "  ".join(filters) if filters else "[dim]no filters[/]"
+
+    console.print()
+    console.print(f"[bold]Cortec memories[/]  —  {filter_line}")
+
+    table = Table(box=box.SIMPLE, show_header=True, expand=True)
+    table.add_column("ID", style="bold cyan", no_wrap=True)
+    table.add_column("Type", no_wrap=True)
+    table.add_column("Conf", justify="right", no_wrap=True)
+    table.add_column("Age", justify="right", no_wrap=True)
+    table.add_column("Summary")
+
+    for m in page_items:
+        eff = m.get("effective_confidence", m.get("confidence", ""))
+        stale = m.get("stale")
+        conf = f"[yellow]{eff}[/]" if stale else str(eff)
+        table.add_row(
+            m["id"],
+            m.get("type", ""),
+            conf,
+            f"{int(m.get('age_days', 0))}d",
+            m.get("summary", "")[:70],
+        )
+    console.print(table)
+
+    shown = len(page_items)
+    console.print(
+        f"[dim]page {cpage + 1}/{total_pages} · showing {shown} of {total} filtered "
+        f"({len(memories)} total)[/]"
+    )
+    if message:
+        console.print(f"[green]{message}[/]")
+
+
+@main.command("browse")
+@click.option("--project", "-p", default=None, help="Start filtered to a project.")
+@click.option("--type", "-t", "type_", default=None, help="Start filtered to a type.")
+@click.option("--page-size", default=browse_module.DEFAULT_PAGE_SIZE, type=click.IntRange(min=1),
+              help="Rows per page.")
+def browse(project: str | None, type_: str | None, page_size: int):
+    """Interactively browse, filter, and prune memories.
+
+    \b
+    A paged terminal view of your memory store. Filter by project/type,
+    full-text search summaries, open a memory for detail, or forget one.
+    """
+    db = _db()
+    vector = _vector()
+    memories = [decay.annotate(m) for m in db.list_all(project=None, approved_only=True)]
+    if not memories:
+        console.print("[yellow]No memories stored yet. Use 'cortec remember' first.[/]")
+        return
+
+    state = browse_module.BrowseState(project=project, type=type_)
+    message = _BROWSE_HELP
+
+    while True:
+        _render_browse(state, memories, page_size, message)
+        message = ""
+        try:
+            raw = click.prompt("\ncortec", prompt_suffix="> ", default="", show_default=False)
+        except (click.exceptions.Abort, EOFError):
+            console.print("\n[dim]bye[/]")
+            break
+
+        cmd, arg = browse_module.parse_command(raw)
+
+        if cmd == "quit":
+            console.print("[dim]bye[/]")
+            break
+        if cmd == "noop":
+            continue
+        if cmd == "help":
+            message = _BROWSE_HELP
+            continue
+        if cmd == "unknown":
+            message = f"[red]unknown command:[/] {arg}  (type 'h' for help)"
+            continue
+        if cmd == "open":
+            meta = db.get(arg)
+            if not meta:
+                message = f"[red]no memory with id {arg}[/]"
+                continue
+            console.print(Panel(
+                meta.get("raw_text") or meta.get("summary", ""),
+                title=f"[bold]{meta['id']}[/]  {meta.get('type', '')}",
+                subtitle=(
+                    f"source={meta.get('source', '')}  project={meta.get('project', '')}  "
+                    f"confidence={meta.get('confidence', '')}  {str(meta.get('created_at', ''))[:10]}"
+                ),
+                border_style="cyan",
+            ))
+            continue
+        if cmd == "forget":
+            meta = db.get(arg)
+            if not meta:
+                message = f"[red]no memory with id {arg}[/]"
+                continue
+            if click.confirm(f"Delete {arg} — \"{meta.get('summary','')[:50]}\"? This cannot be undone"):
+                db.delete(arg)
+                vector.delete(arg)
+                memories = [m for m in memories if m["id"] != arg]
+                message = f"[green]✓ deleted {arg}[/]"
+                if not memories:
+                    console.print("[yellow]No memories left.[/]")
+                    break
+            else:
+                message = "cancelled"
+            continue
+
+        # navigation / filter commands
+        state, message = browse_module.step(state, cmd, arg)
 
 
