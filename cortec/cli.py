@@ -845,3 +845,16 @@ def stale(project: str | None, threshold: float):
     )
 
 
+@main.command("serve")
+def serve():
+    """Run the Cortec memory server over stdio for an MCP client.
+
+    \b
+    Point your MCP client's config at this command. Example:
+      "cortec": { "command": "cortec", "args": ["serve"] }
+    """
+    # Imported lazily so ordinary CLI commands don't pay server startup cost.
+    from .server import serve as _serve
+    _serve()
+
+

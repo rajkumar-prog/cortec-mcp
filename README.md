@@ -42,6 +42,31 @@ cortec doctor
 
 ---
 
+## Connect it as an MCP server
+
+Cortec speaks the [Model Context Protocol](https://modelcontextprotocol.io) over stdio. After installing, point any MCP-compatible client at the `cortec serve` command — add this to the client's MCP server config (commonly an `mcpServers` block in its JSON):
+
+```json
+{
+  "mcpServers": {
+    "cortec": {
+      "command": "cortec",
+      "args": ["serve"]
+    }
+  }
+}
+```
+
+Once connected, the client can call `remember`, `recall`, and the other [tools below](#mcp-tools). Memory lives in `~/.cortec` on your machine — nothing leaves it.
+
+Prefer not to install the console script on PATH? The server also runs as a module:
+
+```bash
+python -m cortec.server
+```
+
+---
+
 ## Core Features
 
 **Secret scanning** — before anything is stored, Cortec scans for API keys, tokens, passwords, and private keys. If it finds one, storage is blocked.
@@ -155,8 +180,9 @@ That starting score then [decays with age](#memory-decay) — `recall` reports t
 - Knowledge graph — connect memories by explicit links, shared tags, and type; traverse with BFS
 - Agent workflows — PR draft, debug assist, and portfolio builder from memory
 - Memory decay — confidence ages toward a floor with per-type half-lives; stale memories surface in recall
-- Full CLI with 22 commands
-- 127 tests passing
+- Runs as an MCP server over stdio (`cortec serve`); session summarization via a local LLM or extractive fallback
+- Full CLI with 23 commands
+- 127 tests passing, CI across Python 3.10–3.12
 - Local-first — no cloud, no telemetry, no external services
 
 ---
@@ -300,6 +326,33 @@ cortec stale --threshold 0.5
 ```
 
 Or call `stale_memories(project, threshold)` from MCP.
+
+---
+
+## Session Summarization
+
+`summarize_session` turns a raw coding session into a few sharp bullet points — decisions, bugs, fixes, architecture choices — and can store the result as a memory.
+
+By default it's **extractive**: it ranks and keeps the most signal-rich sentences, with no model and no network call. For sharper summaries, point it at a local OpenAI-compatible LLM — [Ollama](https://ollama.com) works out of the box and stays entirely on your machine:
+
+```bash
+ollama serve
+ollama pull llama3
+```
+
+Then pass the endpoint when calling the tool:
+
+```python
+summarize_session(
+    text=session_log,
+    project="myapp",
+    llm_endpoint="http://localhost:11434",  # Ollama's OpenAI-compatible API
+    llm_model="llama3",
+    auto_store=True,
+)
+```
+
+If the LLM is unreachable, Cortec falls back to extractive summarization automatically — the call never fails on a missing model.
 
 ---
 
