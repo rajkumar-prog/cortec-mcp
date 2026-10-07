@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "cortec-mcp"
 version = "0.2.0"
 description = "Local-first memory server for developer workflows"
-authors = [{ name = "Raj Kumar Satya", email = "rajkumarrapeti@gmail.com" }]
+authors = [{ name = "Raj Kumar Satya", email = "satyarajkumar411@gmail.com" }]
 license = { text = "MIT" }
 readme = "README.md"
 requires-python = ">=3.10"
